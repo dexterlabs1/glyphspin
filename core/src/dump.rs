@@ -38,7 +38,16 @@ pub fn write(path: &std::path::Path, px: &[u8], w: usize, h: usize, hdr: bool, w
             (util::srgb_encode(r / white), util::srgb_encode(g / white), util::srgb_encode(b / white))
         } else {
             let o = i * 4;
-            (px[o + 2] as f32 / 255.0, px[o + 1] as f32 / 255.0, px[o] as f32 / 255.0)
+            let (r, g, b) = (px[o + 2] as f32 / 255.0, px[o + 1] as f32 / 255.0, px[o] as f32 / 255.0);
+            // SDR: 1.0 is SDR white, so nothing can exceed it; still report the brightest pixel and the average
+            let lin = |c: f32| util::srgb_decode(c);
+            let y = (0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)) * white * unit;
+            if y > max_nits {
+                max_nits = y;
+                max_px = (i % w, i / w);
+            }
+            sum += y as f64;
+            (r, g, b)
         };
         rgb[i * 3] = (r * 255.0 + 0.5) as u8;
         rgb[i * 3 + 1] = (g * 255.0 + 0.5) as u8;
