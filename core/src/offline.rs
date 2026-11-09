@@ -196,6 +196,7 @@ pub fn run(args: &[String], build_atlas: fn(u32) -> Atlas) -> i32 {
         scene.shape.user4 = u;
     }
     let p = Params { style, effects, audio: if audio_sim { 1.0 } else { 0.0 }, oled: care,
+                     bounce: args.iter().any(|a| a == "--bounce"),
                      weights: Default::default() };
     let mut af = AudioFrame::default();
 

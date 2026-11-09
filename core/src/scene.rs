@@ -95,6 +95,7 @@ pub struct Params {
     pub effects: f32,   // 0 off, 0.5 subtle, 1 full
     pub audio: f32,     // 0 off, 0.5 subtle, 1 full
     pub oled: bool,     // OLED care: wander, rotating field, no at-rest HDR pop
+    pub bounce: bool,   // DVD-logo motion: straight lines across the whole screen, soft bounces off the edges
     pub weights: fx::Weights,
 }
 
@@ -119,6 +120,11 @@ struct Particle {
 }
 
 const REROLL_DUR: f32 = 2.3;
+/// Bounce motion speed, in screen heights per second (the DVD logo, slowed down: a 16:9 screen's width in
+/// about a minute).
+const BOUNCE_SPEED: f32 = 0.03;
+/// Seconds a soft bounce takes to turn around.
+const BOUNCE_TURN_S: f32 = 1.5;
 const FIELD_DENSITY: f32 = 0.035;
 const FIELD_REST_LEVEL: f32 = 0.38;
 
@@ -201,6 +207,11 @@ pub struct Scene {
     wander_s: f32,
     /// 0..1, eased toward 1 while OLED care is on (so toggling never jumps)
     pub oled_k: f32,
+    // bounce motion: offset from home and velocity in pixels; 0..1 blend against the wander (eased)
+    bounce_pos: (f32, f32),
+    bounce_vel: (f32, f32),
+    bounce_k: f32,
+    bounce_init: bool,
     reroll_c0: (f32, f32),
     reroll_boost: f32,
     reroll_dur: f32,
@@ -286,6 +297,10 @@ impl Scene {
             wander_ph: [0.0; 5],
             wander_s: 1.0,
             oled_k: 1.0,
+            bounce_pos: (0.0, 0.0),
+            bounce_vel: (0.0, 0.0),
+            bounce_k: 0.0,
+            bounce_init: false,
             reroll_c0: (0.0, 0.0),
             reroll_boost: 1.0,
             reroll_dur: REROLL_DUR,
@@ -378,9 +393,51 @@ impl Scene {
         let y = 0.6 * (tau * t / 337.0 + ph[2]).sin() + 0.4 * (tau * t / 893.0 + ph[3]).sin();
         let s = 0.91 + 0.09 * (tau * t / 563.0 + ph[4]).sin();
         let k = self.oled_k;
-        self.cx = self.home.0 + k * self.wander_amp.0 * x;
-        self.cy = self.home.1 + k * self.wander_amp.1 * y;
+        let b = self.bounce_k;
+        self.cx = self.home.0 + (1.0 - b) * k * self.wander_amp.0 * x + b * self.bounce_pos.0;
+        self.cy = self.home.1 + (1.0 - b) * k * self.wander_amp.1 * y + b * self.bounce_pos.1;
         self.wander_s = 1.0 + k * (s - 1.0);
+    }
+
+    /// Bounce motion, like the old DVD logo but slow: a straight line across the screen at a constant speed,
+    /// turning around at each edge. The edges are soft springs (a half-sine turn of about 1.5 s whose deepest
+    /// point is the edge itself), so the velocity never jumps; the speed is restored between hits.
+    fn step_bounce(&mut self, dt: f32) {
+        let speed = BOUNCE_SPEED * self.screen_h;
+        if !self.bounce_init {
+            // direction from the per-launch phases (not the RNG, so seeded renders stay identical)
+            let tau = 2.0 * std::f32::consts::PI;
+            let a = (25.0 + 40.0 * self.wander_ph[0] / tau).to_radians();
+            let sx = if self.wander_ph[1] < tau / 2.0 { 1.0 } else { -1.0 };
+            let sy = if self.wander_ph[2] < tau / 2.0 { 1.0 } else { -1.0 };
+            self.bounce_vel = (sx * a.cos() * speed, sy * a.sin() * speed);
+            self.bounce_pos = (0.0, 0.0);
+            self.bounce_init = true;
+        }
+        // room for the centre: the visible screen (the grid has a spare cell each side) less the object's radius
+        let r = self.base_s * self.zoom * self.wander_s * 1.15;
+        let half = (((self.cols as f32 - 2.0) * self.cw) / 2.0, ((self.rows as f32 - 2.0) * self.ch) / 2.0);
+        let room = ((half.0 - r).max(0.0), (half.1 - r).max(0.0));
+        let w = std::f32::consts::PI / BOUNCE_TURN_S;
+        let mut walled = false;
+        for (p, v, b) in [(&mut self.bounce_pos.0, &mut self.bounce_vel.0, room.0),
+                          (&mut self.bounce_pos.1, &mut self.bounce_vel.1, room.1)] {
+            let soft = (b - speed / w).max(0.0);
+            let over = p.abs() - soft;
+            if over > 0.0 {
+                *v -= p.signum() * w * w * over * dt;
+                walled = true;
+            }
+            *v = v.clamp(-3.0 * speed, 3.0 * speed);
+            *p += *v * dt;
+        }
+        if !walled {
+            let m = (self.bounce_vel.0 * self.bounce_vel.0 + self.bounce_vel.1 * self.bounce_vel.1).sqrt();
+            if m > 1e-3 {
+                let g = 1.0 + (speed / m - 1.0) * (1.0 - (-dt * 0.5).exp());
+                self.bounce_vel = (self.bounce_vel.0 * g, self.bounce_vel.1 * g);
+            }
+        }
     }
 
     /// OLED care: the background field's dots live ~4 minutes each (smooth fade in/out) and then reappear
@@ -627,6 +684,14 @@ impl Scene {
         self.time += dt;
         let e = |rate: f32| 1.0 - (-dt * rate).exp();
         self.oled_k += ((if p.oled { 1.0 } else { 0.0 }) - self.oled_k) * e(0.5);
+        let bt = if p.bounce { 1.0 } else { 0.0 };
+        if self.last_p.is_none() {
+            self.bounce_k = bt; // the first frame starts in the chosen motion
+        }
+        self.bounce_k += (bt - self.bounce_k) * e(0.5);
+        if p.bounce || self.bounce_k > 1e-4 {
+            self.step_bounce(dt);
+        }
         self.update_wander();
         self.last_p = Some(*p);
         let auto_modes = p.style == Style::Auto;

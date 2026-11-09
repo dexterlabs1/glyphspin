@@ -22,12 +22,14 @@ pub const CMD_BLACK: u32 = 430;
 pub const CMD_AUTOREROLL: u32 = 440;
 pub const CMD_BLACK_BG: u32 = 450;
 pub const CMD_ROTATE: u32 = 460; // +0..5 ROTATE
+pub const CMD_MOTION: u32 = 470; // +0..2 MOTIONS
 pub const CMD_PAUSE: u32 = 400;
 pub const CMD_STARTUP: u32 = 401;
 pub const CMD_QUIT: u32 = 499;
 
 pub const STYLES: [&str; 3] = ["auto", "ramp", "braille"];
 pub const SIZES: [&str; 3] = ["fine", "medium", "coarse"];
+pub const MOTIONS: [&str; 2] = ["bounce", "wander"];
 pub const FPS: [u32; 3] = [15, 30, 60];
 pub const HDRS: [&str; 3] = ["auto", "on", "off"];
 pub const HIGHLIGHTS: [u32; 5] = [0, 25, 50, 75, 100];
@@ -92,6 +94,10 @@ pub fn build(s: &Settings, x: &Extras) -> Vec<Item> {
     look.push(Item::Sep);
     for (i, v) in SIZES.iter().enumerate() {
         look.push(radio(CMD_SIZE + i as u32, &format!("Glyphs: {v}"), s.glyph_size == *v));
+    }
+    look.push(Item::Sep);
+    for (i, (v, label)) in MOTIONS.iter().zip(["Motion: bounce", "Motion: wander"]).enumerate() {
+        look.push(radio(CMD_MOTION + i as u32, label, s.motion == *v));
     }
     m.push(Item::Sub("Look".into(), look));
 
@@ -189,6 +195,9 @@ pub fn action(cmd: u32, s: &Settings) -> Action {
         c if (CMD_SIZE..CMD_SIZE + 3).contains(&c) => set("glyph_size", SIZES[(c - CMD_SIZE) as usize]),
         c if (CMD_THEME..CMD_THEME + THEMES.len() as u32).contains(&c) => {
             set("theme", THEMES[(c - CMD_THEME) as usize].name)
+        }
+        c if (CMD_MOTION..CMD_MOTION + MOTIONS.len() as u32).contains(&c) => {
+            set("motion", MOTIONS[(c - CMD_MOTION) as usize])
         }
         CMD_BLACK_BG => set("black_bg", if s.black_bg { "false" } else { "true" }),
         c if (CMD_ROTATE..CMD_ROTATE + ROTATE.len() as u32).contains(&c) => {

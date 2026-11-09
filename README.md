@@ -20,6 +20,8 @@
   plane, depth through glyph density) and a transition (dissolve or morph).
 - **HDR aware.** FP16 scRGB on Windows HDR displays, EDR on Macs with XDR / HDR screens; glyphs stay at or below
   SDR white, highlights only in brief effects.
+- **Roams the whole screen.** It drifts in slow straight lines and turns softly at the edges, like the old DVD
+  logo at a fraction of the speed (or picks the calmer OLED-care wander instead).
 - **Themes.** Eight muted palettes (teal, amber, ice, sage, paper, ember, mono, rose) that crossfade when they
   change, an **OLED black** background that leaves unlit pixels fully off, and optional automatic rotation.
 - **OLED care**, on by default: nothing lights the same pixels for hours (see below).
@@ -80,20 +82,23 @@ for Accessibility access, so it can't tell a click on a Finder icon from a click
 ripple too.
 
 ## Tray menu and settings
-Reroll · Shape (random or any of the 18) · Look (style, glyph size) · Theme (eight palettes, OLED black
+Reroll · Shape (random or any of the 18) · Look (style, glyph size, motion: bounce / wander) · Theme (eight palettes, OLED black
 background, rotate themes: off / with each new shape / every 15, 30 or 60 min) ·
 Effects (off / subtle / full) · Music (Apple Music / all audio / off, intensity) · Display (HDR auto / on / off,
 highlight 0-100 %) · OLED care · Frame rate (15 / 30 / 60 max) · Pause · Start with Windows (Open at Login on
 macOS) · Quit.
 
-In `settings.json` these are `theme`, `black_bg` and `theme_rotate` (`off`, `shape`, `15`, `30`, `60`); a theme
+`motion` is `bounce` (default) or `wander`. In `settings.json` the theme options are `theme`, `black_bg` and
+`theme_rotate` (`off`, `shape`, `15`, `30`, `60`); a theme
 change, the black toggle and each rotation crossfade over about four seconds. `settings.json` also holds the
 reroll weights: `w_solid`, `w_wire`, `w_points` (render modes), `w_plain`,
 `w_sweep`, `w_density` (ambient effect) and `w_dissolve`, `w_morph` (transition).
 
 ## OLED care
 On by default, because a wallpaper is the most static thing a screen shows.
-- The object wanders slowly over most of the screen and gently changes size (periods of 5-15 minutes, eased).
+- The object travels over the whole screen: by default it bounces slowly from edge to edge (about a minute
+  to cross the screen, soft turns at the walls); with motion set to wander it drifts over most of the screen
+  instead. Either way it gently changes size (periods of 5-15 minutes, eased).
 - The glyph grid orbits by up to 3/4 of a cell in whole pixels, so glyph edges never sit on the same pixels.
 - Background dots fade in and out every few minutes, in new places.
 - At rest the brightest glyph is about half your SDR white (about 120 nits at a 240-nit SDR white). Only brief

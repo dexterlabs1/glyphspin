@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- Bounce motion (new default): the object travels in slow straight lines across the whole screen and turns
+  softly at each edge, like the DVD logo at a fraction of the speed (a screen width in about a minute). The
+  old drift stays as Look > Motion: wander. In a two-hour burn-in simulation bounce halves the hottest pixel.
+  `--offline` takes `--bounce`.
+
 ## 0.3.0 - 2026-11-08
 - Themes: teal, amber, ice, sage, paper, ember, mono and rose, each a background, an accent ramp and a
   secondary highlight. The old `accent` setting is read as the theme of the same name.

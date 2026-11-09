@@ -12,6 +12,7 @@ pub struct Settings {
     pub theme: String,      // a theme::THEMES name (read from the old "accent" key too)
     pub black_bg: bool,     // OLED black: true-black background under any theme
     pub theme_rotate: String, // theme::ROTATE: off | shape | 15 | 30 | 60
+    pub motion: String,     // bounce (DVD-logo style, the default) | wander (OLED care drift only)
     pub fps_cap: u32,       // 15 | 30 | 60
     pub paused: bool,
     pub start_with_windows: bool, // start at login (Windows Run key / macOS login item); the OS holds the truth
@@ -38,6 +39,7 @@ impl Default for Settings {
             theme: "teal".into(),
             black_bg: false,
             theme_rotate: "off".into(),
+            motion: "bounce".into(),
             fps_cap: 30,
             paused: false,
             start_with_windows: false,
@@ -76,6 +78,7 @@ impl Settings {
         st("accent", &mut s.theme); // the 0.1 / 0.2 key
         st("theme", &mut s.theme);
         st("theme_rotate", &mut s.theme_rotate);
+        st("motion", &mut s.motion);
         if !crate::theme::ROTATE.contains(&s.theme_rotate.as_str()) {
             s.theme_rotate = "off".into();
         }
@@ -132,6 +135,7 @@ impl Settings {
             "theme" | "accent" => self.theme = val.into(),
             "black_bg" => self.black_bg = val == "true",
             "theme_rotate" => self.theme_rotate = val.into(),
+            "motion" => self.motion = val.into(),
             "fps_cap" => self.fps_cap = val.parse().unwrap_or(30),
             "hdr" => self.hdr = val.into(),
             "highlight" => self.highlight = val.parse().unwrap_or(60),
@@ -152,8 +156,8 @@ impl Settings {
     pub fn save(&self) {
         let q = |v: &str| format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""));
         let text = format!(
-            "{{\n  \"shape\": {},\n  \"style\": {},\n  \"glyph_size\": {},\n  \"theme\": {},\n  \"black_bg\": {},\n  \"theme_rotate\": {},\n  \"fps_cap\": {},\n  \"paused\": {},\n  \"start_with_windows\": {},\n  \"hdr\": {},\n  \"highlight\": {},\n  \"peak_nits\": {},\n  \"effects\": {},\n  \"audio_source\": {},\n  \"audio_level\": {},\n  \"oled_care\": {},\n  \"idle_dim_min\": {},\n  \"idle_black_min\": {},\n  \"auto_reroll_min\": {},\n  \"w_solid\": {},\n  \"w_wire\": {},\n  \"w_points\": {},\n  \"w_plain\": {},\n  \"w_sweep\": {},\n  \"w_density\": {},\n  \"w_dissolve\": {},\n  \"w_morph\": {}\n}}\n",
-            q(&self.shape), q(&self.style), q(&self.glyph_size), q(&self.theme), self.black_bg, q(&self.theme_rotate), self.fps_cap, self.paused,
+            "{{\n  \"shape\": {},\n  \"style\": {},\n  \"glyph_size\": {},\n  \"theme\": {},\n  \"black_bg\": {},\n  \"theme_rotate\": {},\n  \"motion\": {},\n  \"fps_cap\": {},\n  \"paused\": {},\n  \"start_with_windows\": {},\n  \"hdr\": {},\n  \"highlight\": {},\n  \"peak_nits\": {},\n  \"effects\": {},\n  \"audio_source\": {},\n  \"audio_level\": {},\n  \"oled_care\": {},\n  \"idle_dim_min\": {},\n  \"idle_black_min\": {},\n  \"auto_reroll_min\": {},\n  \"w_solid\": {},\n  \"w_wire\": {},\n  \"w_points\": {},\n  \"w_plain\": {},\n  \"w_sweep\": {},\n  \"w_density\": {},\n  \"w_dissolve\": {},\n  \"w_morph\": {}\n}}\n",
+            q(&self.shape), q(&self.style), q(&self.glyph_size), q(&self.theme), self.black_bg, q(&self.theme_rotate), q(&self.motion), self.fps_cap, self.paused,
             self.start_with_windows, q(&self.hdr), self.highlight, self.peak_nits, q(&self.effects),
             q(&self.audio_source), q(&self.audio_level), self.oled_care, self.idle_dim_min, self.idle_black_min,
             self.auto_reroll_min, self.weights.solid, self.weights.wire, self.weights.points, self.weights.plain,

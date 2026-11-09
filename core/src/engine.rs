@@ -51,6 +51,7 @@ pub fn params(s: &Settings) -> Params {
         effects: lv(&s.effects),
         audio: if s.audio_source == "off" { 0.0 } else { lv(&s.audio_level) },
         oled: s.oled_care,
+        bounce: s.motion == "bounce",
         weights: s.weights,
     }
 }

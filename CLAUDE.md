@@ -26,6 +26,10 @@ User-facing docs are in README.md. Maintainers keep local, untracked notes in `d
   starts on 13); now playing from Music's `com.apple.Music.playerInfo` notification (MediaRemote is closed since
   15.4); IPC over a Unix socket in `~/Library/Application Support/Glyphspin`; ad-hoc signed, not notarized.
 - OLED care is on by default; any new effect must move, vary or decay (no static light).
+- Motion: `bounce` (default) = constant speed 0.03 screen heights/s in a straight line; each edge is a soft
+  spring (a 1.5 s half-sine turn whose deepest point is the edge), speed restored between hits, so velocity
+  stays continuous (DVD logo, eased). Direction comes from the per-launch phases, not the RNG, so seeded
+  offline renders are unchanged. `wander` = the OLED-care sums of sines. Switching blends over ~2 s.
 - Themes (`core/src/theme.rs`): muted accents on near-black only (no neon, no rainbow); bands are mixed from
   the accent toward the theme background. OLED black swaps only the background for true black. Every theme
   change crossfades in linear light with smootherstep over 4 s; rotation runs on scene time (stands still while
