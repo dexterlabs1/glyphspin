@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, macos]
     tags: ["v*"]
   pull_request:
 
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,20 +33,100 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          $version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+                      Where-Object name -eq 'glyphspin').version
           $name = "glyphspin-$version-windows-x64"
           New-Item -ItemType Directory -Force dist/$name | Out-Null
           Copy-Item target/release/glyphspin.exe, README.md, LICENSE dist/$name/
           Compress-Archive -Path dist/$name/* -DestinationPath dist/$name.zip -Force
           "ZIP=dist/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Offline renders
+        shell: bash
+        run: tools/ci/offline_cases.sh target/release/glyphspin.exe offline-windows
+
       - uses: actions/upload-artifact@v4
         with:
           name: glyphspin-windows-x64
           path: ${{ env.ZIP }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-windows
+          path: offline-windows
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP }}
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal && rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build universal app
+        run: |
+          packaging/macos/bundle.sh | tee bundle.log
+          grep '^ZIP=' bundle.log >> "$GITHUB_ENV"
+
+      - name: Offline renders
+        run: tools/ci/offline_cases.sh dist/Glyphspin.app/Contents/MacOS/glyphspin offline-macos
+
+      - name: Live checks (window, Metal readback, screenshots, CPU/RAM)
+        run: tools/ci/mac_live.sh dist/Glyphspin.app live-macos
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glyphspin-macos-universal
+          path: ${{ env.ZIP }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-macos
+          path: offline-macos
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-macos
+          path: live-macos
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
+
+  compare:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: offline-windows
+          path: offline-windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: offline-macos
+          path: offline-macos
+      - name: Windows vs macOS offline renders
+        run: |
+          python3 tools/ci/compare.py offline-windows offline-macos | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -h "fnv1a\|^shape" offline-windows/*.txt offline-macos/*.txt

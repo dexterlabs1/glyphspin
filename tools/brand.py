@@ -2,6 +2,7 @@
 
 Writes assets/glyphspin.ico (16-256 px, PNG-compressed entries) and assets/logo.png (512 px).
 Pure Python (zlib + struct), no dependencies:  python tools/brand.py
+macOS app icon (used by packaging/macos/bundle.sh):  python tools/brand.py --icns Glyphspin.icns
 """
 import math
 import os
@@ -81,6 +82,33 @@ def png(size, rgba):
             + chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b''))
 
 
+def render_mac(size):
+    """The mark on the macOS icon grid: the rounded square at ~80 % of the canvas, centred, transparent margin."""
+    inner = round(size * 0.805)
+    src = render(inner)
+    off = (size - inner) // 2
+    px = bytearray(size * size * 4)
+    for y in range(inner):
+        o = ((y + off) * size + off) * 4
+        px[o:o + inner * 4] = src[y * inner * 4:(y + 1) * inner * 4]
+    return bytes(px)
+
+
+def icns(path):
+    """An .icns of PNG entries (macOS 10.7+ reads PNG data in these slots)."""
+    slots = [(b'ic11', 32), (b'ic12', 64), (b'ic07', 128), (b'ic13', 256), (b'ic08', 256), (b'ic14', 512),
+             (b'ic09', 512), (b'ic10', 1024)]
+    cache = {}
+    body = b''
+    for kind, size in slots:
+        if size not in cache:
+            cache[size] = png(size, render_mac(size))
+        body += kind + struct.pack('>I', 8 + len(cache[size])) + cache[size]
+    with open(path, 'wb') as f:
+        f.write(b'icns' + struct.pack('>I', 8 + len(body)) + body)
+    print('wrote', path)
+
+
 def main():
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
     images = [png(s, render(s)) for s in sizes]
@@ -98,4 +126,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == '--icns':
+        icns(sys.argv[2])
+    else:
+        main()
