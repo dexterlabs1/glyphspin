@@ -630,10 +630,20 @@ fn update_capture() {
     } else {
         match a.s.audio_source.as_str() {
             "apple" if apple_playing || test_flags().audio_ungated => {
-                let exe = test_flags().audio_exe.clone().unwrap_or_else(|| "AppleMusic.exe".into());
-                match exe.strip_prefix("pid:") {
-                    Some(pid) => pid.parse().ok().map(audio::Source::Process),
-                    None => audio::find_process(&exe).map(audio::Source::Process),
+                match test_flags().audio_exe.clone() {
+                    Some(exe) => match exe.strip_prefix("pid:") {
+                        Some(pid) => pid.parse().ok().map(audio::Source::Process),
+                        None => audio::find_process(&exe).map(audio::Source::Process),
+                    },
+                    // the process with Apple Music's audio session (re-checked every watch tick), else the app
+                    None => {
+                        let cur = match a.capture.as_ref().map(|c| c.source) {
+                            Some(audio::Source::Process(p)) => Some(p),
+                            _ => None,
+                        };
+                        audio::apple_audio_process(cur).or_else(|| audio::find_process("AppleMusic.exe"))
+                            .map(audio::Source::Process)
+                    }
                 }
             }
             "all" if any_playing || test_flags().audio_ungated => Some(audio::Source::Endpoint),

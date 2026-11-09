@@ -3,8 +3,9 @@
 //! - SMTC (Windows.Media.Control) tells us when Apple Music is actually playing and what. A watcher thread waits on
 //!   SMTC change events (no polling) and posts WM_AUDIO_STATE to the controller.
 //! - Capture runs only while the chosen source is playing and the wallpaper is visible. "Apple Music" uses
-//!   per-process loopback (ActivateAudioInterfaceAsync, PROCESS_LOOPBACK, include the process tree) on
-//!   AppleMusic.exe, so Discord pings and game audio don't drive the visuals. "All audio" is a plain WASAPI loopback
+//!   per-process loopback (ActivateAudioInterfaceAsync, PROCESS_LOOPBACK, include the process tree) on the
+//!   Apple Music process that has the audio session (AMPLibraryAgent.exe on current builds, else
+//!   AppleMusic.exe), so Discord pings and game audio don't drive the visuals. "All audio" is a plain WASAPI loopback
 //!   of the default render endpoint.
 //! - Analysis (FFT, bands, onsets) is shared with macOS: glyphspin_core::audio.
 
@@ -155,6 +156,51 @@ pub fn start_watcher(ctl: windows::Win32::Foundation::HWND) {
 pub enum Source {
     Process(u32),
     Endpoint,
+}
+
+/// The Apple Music process to capture: the one actually sending audio. Apple Music (Store app 1.1792+) plays
+/// through AMPLibraryAgent.exe, which a service starts, so it is outside AppleMusic.exe's process tree. Among the
+/// processes of the Apple Music package that have an audio session on the default output, prefer an active
+/// session, then `current` (no flapping while playback pauses between tracks), then any; None if none has one.
+pub fn apple_audio_process(current: Option<u32>) -> Option<u32> {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia).ok()?;
+        let mgr: IAudioSessionManager2 = dev.Activate(CLSCTX_ALL, None).ok()?;
+        let list = mgr.GetSessionEnumerator().ok()?;
+        let mut active = None;
+        let mut any: Vec<u32> = Vec::new();
+        for i in 0..list.GetCount().unwrap_or(0) {
+            let Ok(ctl) = list.GetSession(i) else { continue };
+            let Ok(ctl2) = ctl.cast::<IAudioSessionControl2>() else { continue };
+            let Ok(pid) = ctl2.GetProcessId() else { continue };
+            if pid == 0 || !is_apple_music_process(pid) {
+                continue;
+            }
+            match ctl.GetState() {
+                Ok(s) if s == AudioSessionStateActive => {
+                    active.get_or_insert(pid);
+                }
+                Ok(s) if s == AudioSessionStateExpired => {}
+                _ => any.push(pid),
+            }
+        }
+        active.or_else(|| current.filter(|c| any.contains(c))).or_else(|| any.first().copied())
+    }
+}
+
+/// Is `pid` an executable inside the Apple Music Store package (AppleMusic.exe, AMPLibraryAgent.exe, ...)?
+fn is_apple_music_process(pid: u32) -> bool {
+    unsafe {
+        let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return false };
+        let mut buf = [0u16; 1024];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len)
+            .is_ok();
+        let _ = CloseHandle(h);
+        ok && String::from_utf16_lossy(&buf[..len as usize]).to_ascii_lowercase().contains("appleinc.applemusicwin")
+    }
 }
 
 /// PID of the root process named `exe`: when several share the name (Apple Music runs more than one
