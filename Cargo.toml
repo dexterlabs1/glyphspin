@@ -13,7 +13,7 @@ categories = ["visualization"]
 members = ["core"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 
 [build-dependencies]
 # not cfg(windows): build-dependency cfgs follow the host, and build.rs only uses it when targeting Windows
