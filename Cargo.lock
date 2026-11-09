@@ -37,7 +37,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "glyphspin"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "block2",
  "dispatch2",
@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "glyphspin-core"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "hashbrown"

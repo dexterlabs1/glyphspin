@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-11-09
 - Bounce motion (new default): the object travels in slow straight lines across the whole screen and turns
   softly at each edge, like the DVD logo at a fraction of the speed (a screen width in about a minute). The
   old drift stays as Look > Motion: wander. In a two-hour burn-in simulation bounce halves the hottest pixel.
