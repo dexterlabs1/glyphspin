@@ -15,7 +15,8 @@ members = ["core"]
 [workspace.package]
 version = "0.1.0"
 
-[target.'cfg(windows)'.build-dependencies]
+[build-dependencies]
+# not cfg(windows): build-dependency cfgs follow the host, and build.rs only uses it when targeting Windows
 winresource = "0.1"
 
 [dependencies]
