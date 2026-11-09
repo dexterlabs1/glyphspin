@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 - 2026-11-09
+- Windows: music reactivity works with current Apple Music builds, which play through AMPLibraryAgent.exe (started by a
+  service, outside AppleMusic.exe's process tree). Glyphspin now captures whichever Apple Music process owns the audio
+  session, re-checked every second, falling back to AppleMusic.exe.
+
 ## 0.4.0 - 2026-11-09
 - Bounce motion (new default): the object travels in slow straight lines across the whole screen and turns
   softly at each edge, like the DVD logo at a fraction of the speed (a screen width in about a minute). The

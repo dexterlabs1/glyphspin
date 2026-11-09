@@ -74,7 +74,7 @@ Test flags: `--no-pause`, `--shape S`, `--seed N`, `--sim-hdr <nits>`, `--sim-id
 4. Builds must stay warning-free. No real desktop captures in the repo.
 
 ## Current status
-0.4.0: bounce motion (default). 0.3.0: themes, OLED black, theme rotation. 0.2.0: adds macOS. 0.1.0: 18 shapes, render modes and effects, HDR, OLED care, music reactivity, tray, CI release
+0.4.1: Apple Music capture follows AMPLibraryAgent.exe. 0.4.0: bounce motion (default). 0.3.0: themes, OLED black, theme rotation. 0.2.0: adds macOS. 0.1.0: 18 shapes, render modes and effects, HDR, OLED care, music reactivity, tray, CI release
 workflow. Windows tested on Windows 11 24H2/25H2 with an RTX GPU at 3840x2160. macOS verified only on a CI runner
 (macOS 26 VM, 1024x768, no audio device): drawn behind Finder's icons, SDR and EDR readbacks, effects, quit, ~1.9 %
 of one core, cell grids identical to Windows. Not yet verified: a real Mac (Retina, multi-screen, music taps and
