@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 - 2026-11-08
+- macOS support (13 Ventura+, universal app): a Metal window per screen at desktop level behind Finder's icons, EDR
+  highlights on XDR / HDR screens, a menu bar extra with the same menu, Open at Login, Option + drag to rotate on
+  trackpads, and music reactivity through Core Audio process taps (macOS 14.2+).
+- The code is split into a platform-free core (shapes, scene, effects, OLED care, audio analysis, settings, menu
+  model) and Windows / macOS backends; Windows output is byte-identical to 0.1.0 in the offline reference cases.
+- `--dump` now reports the brightest pixel and the average for SDR frames too.
+
 ## 0.1.0 - 2026-11-08
 First public release.
 - Live wallpaper behind the desktop icons on Windows 10/11, including the Windows 11 24H2 desktop layout.

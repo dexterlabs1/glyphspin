@@ -2,14 +2,14 @@
 
 <h1 align="center">Glyphspin</h1>
 
-<p align="center">A 3D object drawn in text, turning slowly as your live Windows wallpaper.</p>
+<p align="center">A 3D object drawn in text, turning slowly as your live wallpaper, on Windows and macOS.</p>
 
 <p align="center"><img src="docs/hero.webp" width="960" alt="Glyphspin running as a wallpaper"></p>
 <p align="center"><sub>Frames read back from the app's own swapchain at 3840x2160 (cropped).</sub></p>
 <p align="center"><a href="https://github.com/dexterlabs1/glyphspin/releases/download/v0.1.0/glyphspin-demo.mp4"><b>Watch the one-minute demo</b></a> (a screen recording of a real desktop: drag, ripples, explode, slicing plane, morph, 4D turn)</p>
 
 ## Features
-- **18 mathematical objects**, rendered as a luminance ramp, braille or dot glyphs in Cascadia Mono: torus, knots,
+- **18 mathematical objects**, rendered as a luminance ramp, braille or dot glyphs (Cascadia Mono on Windows, SF Mono on macOS): torus, knots,
   geodesic sphere, Hopf fibration, a tesseract / 24-cell rotating in 4D, gyroid shell, Lorenz and Aizawa
   attractors that draw themselves, morphing supershapes, a Klein bottle, armillary rings, metaballs, a nebula with
   constellation lines, a Calabi-Yau slice and more.
@@ -18,7 +18,8 @@
   it, shift + middle-drag to turn 4D shapes through the fourth dimension.
 - **Always fresh.** Every reroll picks a shape, a render mode (solid / wire / points), an ambient effect (a slicing
   plane, depth through glyph density) and a transition (dissolve or morph).
-- **HDR aware.** FP16 scRGB on HDR displays, glyphs at or below your SDR white, highlights only in brief effects.
+- **HDR aware.** FP16 scRGB on Windows HDR displays, EDR on Macs with XDR / HDR screens; glyphs stay at or below
+  SDR white, highlights only in brief effects.
 - **OLED care**, on by default: nothing lights the same pixels for hours (see below).
 - **Music reactive** with Apple Music (or any audio), capturing only that app's sound.
 - **Light.** About 2-3 % of one CPU core while drifting, nothing at all when the desktop is covered.
@@ -31,6 +32,10 @@
 - A GPU with Direct3D 11.
 - HDR is optional. Apple Music (Microsoft Store version) is optional.
 
+**macOS** (new in 0.2.0)
+- macOS 13 Ventura or later, Apple silicon or Intel (one universal app).
+- Music reactivity needs macOS 14.2 or later (Core Audio process taps).
+
 ## Install
 1. Download `glyphspin-<version>-windows-x64.zip` from [Releases](../../releases) and unzip it anywhere.
 2. Run `glyphspin.exe`. A small dotted ring appears in the system tray; the wallpaper takes over the desktop
@@ -39,6 +44,21 @@
 
 Nothing is installed; settings live in `%APPDATA%\Glyphspin\settings.json`. "Start with Windows" in the tray menu
 adds or removes a `HKCU\...\Run` entry; it is off unless you turn it on.
+
+### macOS
+1. Download `glyphspin-<version>-macos-universal.zip` from [Releases](../../releases), unzip it and move
+   `Glyphspin.app` to Applications.
+2. The app is not notarized (no Apple Developer ID), so Gatekeeper stops the first launch:
+   - macOS 13 / 14: right-click (Control-click) `Glyphspin.app`, choose **Open**, then **Open** again.
+   - macOS 15 and later: open it once, then go to **System Settings > Privacy & Security** and click
+     **Open Anyway** next to the Glyphspin message.
+3. A dotted ring appears in the menu bar and the wallpaper fills the desktop behind your icons. **Quit** in that
+   menu closes it. Your normal wallpaper is never changed: Glyphspin draws in its own window at desktop level.
+4. With music on, macOS asks once for **System Audio Recording** permission (Privacy & Security > Screen &
+   System Audio Recording). Without it the wallpaper still works; it just doesn't react to music.
+
+Settings live in `~/Library/Application Support/Glyphspin/settings.json`. "Open at Login" in the menu registers it
+as a login item (System Settings > General > Login Items); it is off unless you turn it on.
 
 ## Controls
 | On the bare desktop | Does |
@@ -52,10 +72,16 @@ adds or removes a `HKCU\...\Run` entry; it is off unless you turn it on.
 
 The app only observes the mouse; it never blocks or swallows input.
 
+On macOS the same gestures work, plus **Option + drag** to rotate (and Option + double-click to reroll) for
+trackpads and mice without a middle button; Control + scroll stays the system's screen zoom. Glyphspin doesn't ask
+for Accessibility access, so it can't tell a click on a Finder icon from a click on bare desktop: icon clicks
+ripple too.
+
 ## Tray menu and settings
 Reroll · Shape (random or any of the 18) · Look (style, glyph size, colour: teal / amber / ice / sage / paper) ·
 Effects (off / subtle / full) · Music (Apple Music / all audio / off, intensity) · Display (HDR auto / on / off,
-highlight 0-100 %) · OLED care · Frame rate (15 / 30 / 60 max) · Pause · Start with Windows · Quit.
+highlight 0-100 %) · OLED care · Frame rate (15 / 30 / 60 max) · Pause · Start with Windows (Open at Login on
+macOS) · Quit.
 
 `settings.json` also holds the reroll weights: `w_solid`, `w_wire`, `w_points` (render modes), `w_plain`,
 `w_sweep`, `w_density` (ambient effect) and `w_dissolve`, `w_morph` (transition).
@@ -83,6 +109,9 @@ object's size, beats send soft flashes or ripples, mids and highs speed its slow
 and eight spectrum bands ripple the surface. Capture runs only while something is playing (via the Windows media
 session) and the wallpaper is visible. It is read-only and doesn't affect playback.
 
+On macOS a Core Audio process tap listens to the Music app only ("all audio" taps the system output). Capture
+runs while Music is playing (from its own player notifications) or any of its processes is sending audio.
+
 ## Performance
 Measured on a 3840x2160 desktop (Ryzen 9 9950X3D, RTX 5090), release build:
 
@@ -106,6 +135,14 @@ Needs Rust (stable, MSVC toolchain) and the Windows SDK (for `rc.exe`, which emb
 shaders (`shaders/*.cso`) are committed, so `fxc` is only needed if you edit `shaders/glyph.hlsl`.
 `python tools/brand.py` regenerates the icon and logo.
 
+On macOS (Rust stable with the `aarch64-apple-darwin` and `x86_64-apple-darwin` targets, Xcode command line tools,
+python3):
+```
+packaging/macos/bundle.sh        # dist/Glyphspin.app (universal, ad-hoc signed) and its zip
+open dist/Glyphspin.app
+```
+The Metal shader (`shaders/glyph.metal`) is compiled at launch, so no Xcode project is involved.
+
 ## How it works
 - On Windows 11 24H2+ the desktop is a `Progman` window whose children are the icon layer (`SHELLDLL_DefView`) and
   a `WorkerW` painting the static wallpaper. Glyphspin parents its own window between the two and draws into it
@@ -115,6 +152,10 @@ shaders (`shaders/*.cso`) are committed, so `fxc` is only needed if you edit `sh
   Mono atlas, in scRGB for HDR or sRGB otherwise.
 - It sleeps between frames on a high-resolution timer, drops to 12 fps when nothing is moving, and stops
   completely (including its mouse hook and audio capture) whenever the desktop isn't visible.
+
+- On macOS each screen gets a borderless window at the desktop level, just above the system wallpaper and below
+  Finder's icons, drawn with Metal (8-bit sRGB, or 16-bit float extended sRGB when the screen has EDR headroom).
+  The same cell pipeline runs in a shared, platform-free core, so both platforms render the same cells.
 
 ## License
 MIT. See [LICENSE](LICENSE).

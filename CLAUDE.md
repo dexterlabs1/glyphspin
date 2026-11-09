@@ -1,8 +1,9 @@
 # CLAUDE.md — Glyphspin
 
 ## What it is
-Glyphspin is a Windows live wallpaper: one 3D object rendered as text glyphs, turning slowly behind the desktop
-icons, with mouse interaction, HDR output, OLED care and music reactivity. Rust, single exe, no runtime.
+Glyphspin is a live wallpaper for Windows and macOS: one 3D object rendered as text glyphs, turning slowly behind
+the desktop icons, with mouse interaction, HDR output, OLED care and music reactivity. Rust, single binary, no
+runtime.
 User-facing docs are in README.md. Maintainers keep local, untracked notes in `dev-notes/` (gitignored).
 
 ## Confirmed decisions
@@ -18,15 +19,27 @@ User-facing docs are in README.md. Maintainers keep local, untracked notes in `d
   desktop is visible. Middle button for rotation because Explorer binds nothing to it on the desktop.
 - Full pause (no frames, hook, or audio) when the desktop is covered, a fullscreen app runs, the session is
   locked or the display is off.
+- macOS: objc2 0.6 / objc2-* 0.3 (metal-rs and cocoa are deprecated); a borderless window per screen at the
+  desktop level, Metal (BGRA8 sRGB, or RGBA16F extended linear sRGB when the screen has EDR headroom; EDR white =
+  1.0); a global NSEvent monitor that only observes (Option + drag rotates on Macs without a middle button; no
+  Accessibility API, so icon clicks ripple too); Core Audio process taps looked up at runtime (14.2+, the app still
+  starts on 13); now playing from Music's `com.apple.Music.playerInfo` notification (MediaRemote is closed since
+  15.4); IPC over a Unix socket in `~/Library/Application Support/Glyphspin`; ad-hoc signed, not notarized.
 - OLED care is on by default; any new effect must move, vary or decay (no static light).
 
 ## Layout
-`src/main.rs` controller + frame loop + CLI · `desktop.rs` wallpaper host (24H2 + legacy) · `gpu.rs` D3D11/DComp ·
-`hdr.rs` · `glyphs.rs` atlas · `shapes.rs` / `shapes_x.rs` shapes · `raster.rs` cell rasteriser · `scene.rs`
-motion, interaction, field, effects, composition · `fx.rs` render modes and effects · `oled.rs` OLED care ·
-`audio.rs` SMTC + loopback + FFT · `input.rs` hook · `watch.rs` visibility · `tray.rs`, `settings.rs` ·
-`offline.rs` headless pipeline (benchmarks, reference shading, burn-in heat maps) · `shaders/glyph.hlsl` (+
-committed `.cso`) · `tools/brand.py` icon/logo.
+Cargo workspace. `core/` (crate `glyphspin-core`, no dependencies, no platform code): `shapes.rs` / `shapes_x.rs`
+shapes · `raster.rs` cell rasteriser · `scene.rs` motion, interaction, field, effects, composition · `fx.rs` render
+modes and effects · `oled.rs` OLED care · `audio.rs` FFT analysis + shared features · `engine.rs` per-screen frame
+controller · `atlas.rs` atlas layout · `menu.rs` menu model · `settings.rs` · `offline.rs` headless pipeline
+(benchmarks, reference shading, burn-in heat maps) · `dump.rs` readback decode + stats.
+`src/main.rs` CLI · `src/platform/mod.rs` the `Platform` / `Surface` traits ·
+`src/platform/windows/` `desktop.rs` wallpaper host (24H2 + legacy), `gpu.rs` D3D11/DComp, `hdr.rs`, `glyphs.rs`
+GDI atlas, `audio.rs` SMTC + loopback, `input.rs` hook, `watch.rs` visibility, `tray.rs` ·
+`src/platform/macos/` `screen.rs`, `metal.rs`, `glyphs.rs` CoreText atlas, `input.rs`, `watch.rs`, `menubar.rs`,
+`audio.rs` process taps, `ipc.rs` · `shaders/glyph.hlsl` (+ committed `.cso`) and `shaders/glyph.metal` (compiled
+at launch) · `packaging/macos/` Info.plist + `bundle.sh` · `tools/brand.py` icon/logo/icns · `tools/ci/` offline
+cases, macOS live checks, Windows-vs-macOS compare.
 
 ## Key commands
 ```
@@ -37,6 +50,10 @@ glyphspin.exe --send reroll | ripple X Y | set key=value | stats PATH | fx sweep
 glyphspin.exe --offline out.bmp --shape torus --frames 90         # headless render + timing
 glyphspin.exe --offline heat.bmp --burn 7200 [--oled off] [--idle] # two-hour burn-in heat map
 ```
+macOS: `packaging/macos/bundle.sh` (universal `dist/Glyphspin.app` + zip); the same CLI runs from
+`Glyphspin.app/Contents/MacOS/glyphspin`. CI (`.github/workflows/build.yml`) builds both, runs the offline cases
+on both, live-checks the Mac app on a runner (screenshots, readbacks, CPU) and compares the cell grids.
+Offline cross-platform flags: `--atlas procedural`, `--cells PATH` (FNV-1a hash of the cell grid).
 Test flags: `--no-pause`, `--shape S`, `--seed N`, `--sim-hdr <nits>`, `--sim-idle <s>`, `--audio-exe <exe|pid:N>`,
 `--audio-ungated`. Shaders: `fxc -T ps_5_0 -E ps_main -O3 -Fo shaders\ps.cso shaders\glyph.hlsl` (and `vs_5_0` /
 `vs_main` / `vs.cso`).
@@ -48,6 +65,9 @@ Test flags: `--no-pause`, `--shape S`, `--seed N`, `--sim-hdr <nits>`, `--sim-id
 4. Builds must stay warning-free. No real desktop captures in the repo.
 
 ## Current status
-0.1.0: 18 shapes, render modes and effects, HDR, OLED care, music reactivity, tray, CI release workflow.
-Tested on Windows 11 24H2/25H2 with an RTX GPU at 3840x2160. Not yet verified: the pre-24H2 WorkerW path, a real
-Explorer restart, on-screen HDR by eye, multi-monitor beyond the primary display.
+0.2.0: adds macOS. 0.1.0: 18 shapes, render modes and effects, HDR, OLED care, music reactivity, tray, CI release
+workflow. Windows tested on Windows 11 24H2/25H2 with an RTX GPU at 3840x2160. macOS verified only on a CI runner
+(macOS 26 VM, 1024x768, no audio device): drawn behind Finder's icons, SDR and EDR readbacks, effects, quit, ~1.9 %
+of one core, cell grids identical to Windows. Not yet verified: a real Mac (Retina, multi-screen, music taps and
+the permission prompt, Option-drag), the pre-24H2 WorkerW path, a real Explorer restart, on-screen HDR by eye,
+multi-monitor beyond the primary display on Windows.
