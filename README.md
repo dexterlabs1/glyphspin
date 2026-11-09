@@ -6,6 +6,7 @@
 
 <p align="center"><img src="docs/hero.webp" width="960" alt="Glyphspin running as a wallpaper"></p>
 <p align="center"><sub>Frames read back from the app's own swapchain at 3840x2160 (cropped).</sub></p>
+<p align="center"><a href="https://github.com/dexterlabs1/glyphspin/releases/download/v0.1.0/glyphspin-demo.mp4"><b>Watch the one-minute demo</b></a> (a screen recording of a real desktop: drag, ripples, explode, slicing plane, morph, 4D turn)</p>
 
 ## Features
 - **18 mathematical objects**, rendered as a luminance ramp, braille or dot glyphs in Cascadia Mono: torus, knots,
