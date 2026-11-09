@@ -20,6 +20,8 @@
   plane, depth through glyph density) and a transition (dissolve or morph).
 - **HDR aware.** FP16 scRGB on Windows HDR displays, EDR on Macs with XDR / HDR screens; glyphs stay at or below
   SDR white, highlights only in brief effects.
+- **Themes.** Eight muted palettes (teal, amber, ice, sage, paper, ember, mono, rose) that crossfade when they
+  change, an **OLED black** background that leaves unlit pixels fully off, and optional automatic rotation.
 - **OLED care**, on by default: nothing lights the same pixels for hours (see below).
 - **Music reactive** with Apple Music (or any audio), capturing only that app's sound.
 - **Light.** About 2-3 % of one CPU core while drifting, nothing at all when the desktop is covered.
@@ -78,12 +80,15 @@ for Accessibility access, so it can't tell a click on a Finder icon from a click
 ripple too.
 
 ## Tray menu and settings
-Reroll · Shape (random or any of the 18) · Look (style, glyph size, colour: teal / amber / ice / sage / paper) ·
+Reroll · Shape (random or any of the 18) · Look (style, glyph size) · Theme (eight palettes, OLED black
+background, rotate themes: off / with each new shape / every 15, 30 or 60 min) ·
 Effects (off / subtle / full) · Music (Apple Music / all audio / off, intensity) · Display (HDR auto / on / off,
 highlight 0-100 %) · OLED care · Frame rate (15 / 30 / 60 max) · Pause · Start with Windows (Open at Login on
 macOS) · Quit.
 
-`settings.json` also holds the reroll weights: `w_solid`, `w_wire`, `w_points` (render modes), `w_plain`,
+In `settings.json` these are `theme`, `black_bg` and `theme_rotate` (`off`, `shape`, `15`, `30`, `60`); a theme
+change, the black toggle and each rotation crossfade over about four seconds. `settings.json` also holds the
+reroll weights: `w_solid`, `w_wire`, `w_points` (render modes), `w_plain`,
 `w_sweep`, `w_density` (ambient effect) and `w_dissolve`, `w_morph` (transition).
 
 ## OLED care
@@ -96,6 +101,8 @@ On by default, because a wallpaper is the most static thing a screen shows.
 - After 10 minutes without input it dims to 30 %; after 30 more minutes it fades to black and stops drawing. Any
   input brings it back.
 - A new shape every 25 minutes.
+- Optional: **OLED black background** (Theme menu) makes the background true black instead of near-black, so
+  every pixel without a glyph is switched off.
 
 A two-hour simulated burn-in (per-pixel light summed over the run, same scale) shows the difference: the hottest
 pixel drops from 33 % of SDR white on average to 3 %, and its ratio to the screen mean from 37x to 5x.

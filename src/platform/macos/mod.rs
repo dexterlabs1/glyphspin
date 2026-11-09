@@ -789,8 +789,9 @@ fn text_command(cmd: &str) {
             let f = *glyphspin_core::audio::FEATURES.lock().unwrap();
             let screens: Vec<String> = a.screens.iter().map(|s| format!(
                 "'{}' {}x{} @{}x active {} shown {} occluded {} covered {} edr {:.2}/{:.2} hdr {} grid {}x{} cell {}x{} \
-                 shape {}", s.name, s.w, s.h, s.scale, s.active, s.shown, s.occluded, s.covered, s.edr_now, s.edr_max,
-                s.surface.hdr, s.eng.cols, s.eng.rows, s.eng.cw, s.eng.ch, s.eng.scene.shape_name())).collect();
+                 shape {} theme {} fading {}", s.name, s.w, s.h, s.scale, s.active, s.shown, s.occluded, s.covered, s.edr_now, s.edr_max,
+                s.surface.hdr, s.eng.cols, s.eng.rows, s.eng.cw, s.eng.ch, s.eng.scene.shape_name(),
+                s.eng.theme.name, s.eng.theme.fading())).collect();
             let text = format!(
                 "paused {} locked {} screens_asleep {} session_active {} low_power {} monitor {}\n\
                  frames {} drawn {} avg_cpu_ms {:.3} (step+compose {:.3}, upload+draw+present {:.3})\n\

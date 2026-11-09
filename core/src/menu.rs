@@ -1,14 +1,15 @@
 //! The tray / menu-bar menu as data, so Windows (tray) and macOS (menu-bar extra) show the same menu and map
 //! the same command ids to the same settings.
 
-use crate::settings::{ACCENTS, Settings};
+use crate::settings::Settings;
+use crate::theme::{ROTATE, THEMES};
 use crate::shapes::SHAPES;
 
 pub const CMD_REROLL: u32 = 100;
 pub const CMD_SHAPE: u32 = 200; // +0 random, +1.. SHAPES
 pub const CMD_STYLE: u32 = 300;
 pub const CMD_SIZE: u32 = 310;
-pub const CMD_ACCENT: u32 = 320;
+pub const CMD_THEME: u32 = 320; // +0..8 THEMES
 pub const CMD_FPS: u32 = 330;
 pub const CMD_HDR: u32 = 340;
 pub const CMD_HIGHLIGHT: u32 = 350;
@@ -19,6 +20,8 @@ pub const CMD_OLED: u32 = 410;
 pub const CMD_DIM: u32 = 420;
 pub const CMD_BLACK: u32 = 430;
 pub const CMD_AUTOREROLL: u32 = 440;
+pub const CMD_BLACK_BG: u32 = 450;
+pub const CMD_ROTATE: u32 = 460; // +0..5 ROTATE
 pub const CMD_PAUSE: u32 = 400;
 pub const CMD_STARTUP: u32 = 401;
 pub const CMD_QUIT: u32 = 499;
@@ -90,11 +93,19 @@ pub fn build(s: &Settings, x: &Extras) -> Vec<Item> {
     for (i, v) in SIZES.iter().enumerate() {
         look.push(radio(CMD_SIZE + i as u32, &format!("Glyphs: {v}"), s.glyph_size == *v));
     }
-    look.push(Item::Sep);
-    for (i, (name, _)) in ACCENTS.iter().enumerate() {
-        look.push(radio(CMD_ACCENT + i as u32, &format!("Colour: {name}"), s.accent == *name));
-    }
     m.push(Item::Sub("Look".into(), look));
+
+    let mut th: Vec<Item> = THEMES.iter().enumerate()
+        .map(|(i, t)| radio(CMD_THEME + i as u32, t.label, s.theme == t.name)).collect();
+    th.push(Item::Sep);
+    th.push(cmd(CMD_BLACK_BG, "OLED black background", Check::Box(s.black_bg)));
+    th.push(Item::Sep);
+    th.push(note("Rotate themes"));
+    let labels = ["Off", "With each new shape", "Every 15 min", "Every 30 min", "Every 60 min"];
+    for (i, (v, label)) in ROTATE.iter().zip(labels).enumerate() {
+        th.push(radio(CMD_ROTATE + i as u32, label, s.theme_rotate == *v));
+    }
+    m.push(Item::Sub("Theme".into(), th));
 
     let fx = LEVELS.iter().enumerate().map(|(i, v)| radio(CMD_EFFECTS + i as u32, v, s.effects == *v)).collect();
     m.push(Item::Sub("Effects".into(), fx));
@@ -176,7 +187,13 @@ pub fn action(cmd: u32, s: &Settings) -> Action {
         }
         c if (CMD_STYLE..CMD_STYLE + 3).contains(&c) => set("style", STYLES[(c - CMD_STYLE) as usize]),
         c if (CMD_SIZE..CMD_SIZE + 3).contains(&c) => set("glyph_size", SIZES[(c - CMD_SIZE) as usize]),
-        c if (CMD_ACCENT..CMD_ACCENT + 5).contains(&c) => set("accent", ACCENTS[(c - CMD_ACCENT) as usize].0),
+        c if (CMD_THEME..CMD_THEME + THEMES.len() as u32).contains(&c) => {
+            set("theme", THEMES[(c - CMD_THEME) as usize].name)
+        }
+        CMD_BLACK_BG => set("black_bg", if s.black_bg { "false" } else { "true" }),
+        c if (CMD_ROTATE..CMD_ROTATE + ROTATE.len() as u32).contains(&c) => {
+            set("theme_rotate", ROTATE[(c - CMD_ROTATE) as usize])
+        }
         c if (CMD_FPS..CMD_FPS + 3).contains(&c) => set("fps_cap", &FPS[(c - CMD_FPS) as usize].to_string()),
         c if (CMD_HDR..CMD_HDR + 3).contains(&c) => set("hdr", HDRS[(c - CMD_HDR) as usize]),
         c if (CMD_HIGHLIGHT..CMD_HIGHLIGHT + 5).contains(&c) => {

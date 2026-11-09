@@ -17,7 +17,7 @@
 use crate::raster::Style;
 use crate::scene::{AudioFrame, Params, Scene};
 use crate::atlas::{self, ATLAS_COLS, Atlas, TILE_COUNT};
-use crate::{oled, settings, shapes, util};
+use crate::{oled, shapes, util};
 
 struct Shader {
     w: u32,
@@ -199,18 +199,16 @@ pub fn run(args: &[String], build_atlas: fn(u32) -> Atlas) -> i32 {
                      weights: Default::default() };
     let mut af = AudioFrame::default();
 
-    let acc = util::hex_rgb(settings::accent_hex("teal"));
-    let bg = util::hex_rgb("#0b0e0f");
-    let white = [1.0, 1.0, 1.0];
-    let bands: Vec<[f32; 4]> = [bg, util::mix(acc, bg, 0.8), util::mix(acc, bg, 0.62), util::mix(acc, bg, 0.38), acc,
-                                util::mix(acc, white, 0.45)].iter().map(|c| util::lin(*c)).collect();
+    let black = args.iter().any(|a| a == "--black");
+    let pal = crate::theme::palette(arg("--theme").as_deref().unwrap_or("teal"), black);
+    let bands: Vec<[f32; 4]> = pal.bands.to_vec();
     let mut band_luma = [0f32; 6];
     for i in 0..6 {
         band_luma[i] = luma([bands[i][0], bands[i][1], bands[i][2]]);
     }
     let sh = Shader {
         w, h, cw, ch, cols, rows, atlas_w: atlas.w, atlas: atlas.pixels.clone(), bands,
-        amber: util::lin(util::hex_rgb("#e0a64a")), glow_col: util::lin(util::mix(acc, white, 0.2)), glow_gain: 0.35,
+        amber: pal.second, glow_col: pal.glow, glow_gain: 0.35,
     };
 
     let mut dimmer = oled::Dimmer::new();

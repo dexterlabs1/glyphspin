@@ -16,4 +16,5 @@ pub mod scene;
 pub mod settings;
 pub mod shapes;
 pub mod shapes_x;
+pub mod theme;
 pub mod util;

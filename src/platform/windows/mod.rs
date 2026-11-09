@@ -970,7 +970,7 @@ fn text_command(cmd: &str) {
                  features bass {:.2} mid {:.2} high {:.2} loud {:.2} onsets {}\n\
                  onset->frame latency: last {:.1} ms avg {:.1} ms over {}\n\
                  display {:?}\n\
-                 grid {}x{} cell {}x{} shape {}",
+                 grid {}x{} cell {}x{} shape {} theme {} black {} rotate {} fading {}",
                 a.active, a.visible, a.quns, a.locked, a.display_on, a.s.paused,
                 input::HOOKED.load(std::sync::atomic::Ordering::Relaxed), watch::centre_hit(a.mon_rect),
                 st.frames, st.drawn, if st.frames > 0 { st.cpu_ms / st.frames as f64 } else { 0.0 },
@@ -978,7 +978,8 @@ fn text_command(cmd: &str) {
                 a.s.audio_source, a.s.audio_level, a.capture.as_ref().map(|c| c.source), m.apple_playing,
                 m.apple_present, m.any_playing, m.title, f.bass, f.mid, f.high, f.loud, f.onset_count,
                 st.lat_last * 1000.0, if st.lat_n > 0 { st.lat_sum / st.lat_n as f64 * 1000.0 } else { 0.0 },
-                st.lat_n, a.disp, a.eng.cols, a.eng.rows, a.eng.cw, a.eng.ch, a.eng.scene.shape_name()
+                st.lat_n, a.disp, a.eng.cols, a.eng.rows, a.eng.cw, a.eng.ch, a.eng.scene.shape_name(),
+                a.eng.theme.name, a.s.black_bg, a.s.theme_rotate, a.eng.theme.fading()
             );
             drop(m);
             let _ = std::fs::write(path, text);

@@ -8,8 +8,8 @@ use crate::fx;
 use crate::oled;
 use crate::raster::Style;
 use crate::scene::{AudioFrame, Params, Scene};
-use crate::settings::{self, Settings};
-use crate::util;
+use crate::settings::Settings;
+use crate::theme::ThemeState;
 
 /// Frame rate while nothing is moving.
 pub const IDLE_FPS: f32 = 12.0;
@@ -81,6 +81,7 @@ pub struct Engine {
     pub coverage: Vec<f32>,
     pub band_luma: [f32; 6],
     pub last_drawn: ((i32, i32), u32),
+    pub theme: ThemeState,
 }
 
 impl Engine {
@@ -102,6 +103,7 @@ impl Engine {
             coverage: Vec::new(),
             band_luma: [0.0; 6],
             last_drawn: ((i32::MIN, 0), 0),
+            theme: ThemeState::new(),
         }
     }
 
@@ -132,8 +134,14 @@ impl Engine {
     }
 
     /// OLED care before the scene step: idle dimming and the auto reroll (a quiet fade through dark: effects are for
-    /// interaction, not for an unattended wallpaper). True when it rerolled.
+    /// interaction, not for an unattended wallpaper), then the theme (rotation and crossfade). True when it rerolled.
     pub fn pre_step(&mut self, s: &Settings, dt: f32, idle_s: f32) -> bool {
+        let rerolled = self.pre_step_oled(s, dt, idle_s);
+        self.theme.step(&s.theme, s.black_bg, &s.theme_rotate, self.scene.time, self.scene.shape_name(), dt);
+        rerolled
+    }
+
+    fn pre_step_oled(&mut self, s: &Settings, dt: f32, idle_s: f32) -> bool {
         self.dim_target = oled::Dimmer::target(idle_s, s.oled_care, s.idle_dim_min, s.idle_black_min);
         self.dimmer.step(self.dim_target, dt);
         let auto_min = if s.oled_care { s.auto_reroll_min } else { 0 };
@@ -157,19 +165,17 @@ impl Engine {
         let orbit = oled::orbit(self.scene.time, self.scene.oled_k, self.cw, self.ch, self.orbit_ph);
         self.origin = (self.base_origin.0 + orbit.0, self.base_origin.1 + orbit.1);
         let bright_key = (self.dimmer.v * 1000.0) as u32 ^ ((self.apl.k * 1000.0) as u32) << 12;
-        let changed = changed || self.last_drawn != (self.origin, bright_key);
+        // a theme crossfade redraws every frame at the frame-rate cap until it settles
+        let fading = self.theme.fading();
+        let changed = changed || fading || self.last_drawn != (self.origin, bright_key);
         self.last_drawn = (self.origin, bright_key);
-        Step { busy, changed }
+        Step { busy: busy || fading, changed }
     }
 
     /// Shader constants. `hdr`: the target is a float (scRGB / EDR) surface; `white`: SDR white in the target's units
     /// (nits / 80 on Windows scRGB, 1.0 for macOS EDR and SDR); `peak`: the highlight cap in the same units.
     pub fn consts(&mut self, s: &Settings, hdr: bool, white: f32, peak: f32) -> Consts {
-        let acc = util::hex_rgb(settings::accent_hex(&s.accent));
-        let bg = util::hex_rgb("#0b0e0f");
-        let wh = [1.0, 1.0, 1.0];
-        let bands = [bg, util::mix(acc, bg, 0.80), util::mix(acc, bg, 0.62), util::mix(acc, bg, 0.38), acc,
-                     util::mix(acc, wh, 0.45)];
+        let pal = self.theme.current();
         let mut c = Consts {
             grid_origin: [self.origin.0 as f32, self.origin.1 as f32],
             cell: [self.cw as f32, self.ch as f32],
@@ -177,12 +183,12 @@ impl Engine {
             atlas_cols: ATLAS_COLS,
             ..Default::default()
         };
-        for (i, b) in bands.iter().enumerate() {
-            c.bands[i] = util::lin(*b);
+        for (i, b) in pal.bands.iter().enumerate() {
+            c.bands[i] = *b;
             self.band_luma[i] = 0.2126 * c.bands[i][0] + 0.7152 * c.bands[i][1] + 0.0722 * c.bands[i][2];
         }
-        c.amber = util::lin(util::hex_rgb("#e0a64a"));
-        c.glow_col = util::lin(util::mix(acc, wh, 0.2));
+        c.amber = pal.second;
+        c.glow_col = pal.glow;
         c.glow_gain = 0.35;
         c.hdr = hdr as u32;
         c.white = white;

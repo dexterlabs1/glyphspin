@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+- Themes: teal, amber, ice, sage, paper, ember, mono and rose, each a background, an accent ramp and a
+  secondary highlight. The old `accent` setting is read as the theme of the same name.
+- OLED black background: true black under any theme, glyph colours unchanged.
+- Rotate themes automatically: with each new shape, or every 15, 30 or 60 minutes.
+- Theme changes crossfade (eased, about 4 s). `--offline` takes `--theme NAME` and `--black`; `stats` shows the
+  current theme.
+
 ## 0.2.0 - 2026-11-08
 - macOS support (13 Ventura+, universal app): a Metal window per screen at desktop level behind Finder's icons, EDR
   highlights on XDR / HDR screens, a menu bar extra with the same menu, Open at Login, Option + drag to rotate on

@@ -26,12 +26,16 @@ User-facing docs are in README.md. Maintainers keep local, untracked notes in `d
   starts on 13); now playing from Music's `com.apple.Music.playerInfo` notification (MediaRemote is closed since
   15.4); IPC over a Unix socket in `~/Library/Application Support/Glyphspin`; ad-hoc signed, not notarized.
 - OLED care is on by default; any new effect must move, vary or decay (no static light).
+- Themes (`core/src/theme.rs`): muted accents on near-black only (no neon, no rainbow); bands are mixed from
+  the accent toward the theme background. OLED black swaps only the background for true black. Every theme
+  change crossfades in linear light with smootherstep over 4 s; rotation runs on scene time (stands still while
+  paused) and each screen keeps its own theme state.
 
 ## Layout
 Cargo workspace. `core/` (crate `glyphspin-core`, no dependencies, no platform code): `shapes.rs` / `shapes_x.rs`
 shapes · `raster.rs` cell rasteriser · `scene.rs` motion, interaction, field, effects, composition · `fx.rs` render
 modes and effects · `oled.rs` OLED care · `audio.rs` FFT analysis + shared features · `engine.rs` per-screen frame
-controller · `atlas.rs` atlas layout · `menu.rs` menu model · `settings.rs` · `offline.rs` headless pipeline
+controller · `atlas.rs` atlas layout · `menu.rs` menu model · `settings.rs` · `theme.rs` themes, OLED black, rotation + crossfade · `offline.rs` headless pipeline
 (benchmarks, reference shading, burn-in heat maps) · `dump.rs` readback decode + stats.
 `src/main.rs` CLI · `src/platform/mod.rs` the `Platform` / `Surface` traits ·
 `src/platform/windows/` `desktop.rs` wallpaper host (24H2 + legacy), `gpu.rs` D3D11/DComp, `hdr.rs`, `glyphs.rs`
@@ -53,7 +57,8 @@ glyphspin.exe --offline heat.bmp --burn 7200 [--oled off] [--idle] # two-hour bu
 macOS: `packaging/macos/bundle.sh` (universal `dist/Glyphspin.app` + zip); the same CLI runs from
 `Glyphspin.app/Contents/MacOS/glyphspin`. CI (`.github/workflows/build.yml`) builds both, runs the offline cases
 on both, live-checks the Mac app on a runner (screenshots, readbacks, CPU) and compares the cell grids.
-Offline cross-platform flags: `--atlas procedural`, `--cells PATH` (FNV-1a hash of the cell grid).
+Offline cross-platform flags: `--atlas procedural`, `--cells PATH` (FNV-1a hash of the cell grid); theme
+previews: `--theme NAME`, `--black`.
 Test flags: `--no-pause`, `--shape S`, `--seed N`, `--sim-hdr <nits>`, `--sim-idle <s>`, `--audio-exe <exe|pid:N>`,
 `--audio-ungated`. Shaders: `fxc -T ps_5_0 -E ps_main -O3 -Fo shaders\ps.cso shaders\glyph.hlsl` (and `vs_5_0` /
 `vs_main` / `vs.cso`).
