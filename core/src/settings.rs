@@ -1,5 +1,6 @@
-//! Settings: a flat JSON object in %APPDATA%\Glyphspin\settings.json. Hand-rolled (string/number/bool values
-//! only) so the exe carries no serde.
+//! Settings: a flat JSON object in the platform's settings folder (%APPDATA%\Glyphspin\settings.json on Windows,
+//! ~/Library/Application Support/Glyphspin/settings.json on macOS). Hand-rolled (string/number/bool values only) so
+//! the binary carries no serde.
 
 use std::collections::BTreeMap;
 
@@ -11,7 +12,7 @@ pub struct Settings {
     pub accent: String,     // teal | amber | ice | sage | paper
     pub fps_cap: u32,       // 15 | 30 | 60
     pub paused: bool,
-    pub start_with_windows: bool,
+    pub start_with_windows: bool, // start at login (Windows Run key / macOS login item); the OS holds the truth
     pub hdr: String,     // auto | on | off
     pub highlight: u32,  // 0..100
     pub peak_nits: f32,  // highlight cap (also capped by the display's MaxLuminance)
@@ -115,6 +116,30 @@ impl Settings {
             }
         }
         s
+    }
+
+    /// Apply one `key=value` (tray/menu commands and `--send set`). False for an unknown key.
+    pub fn set(&mut self, key: &str, val: &str) -> bool {
+        match key {
+            "shape" => self.shape = val.into(),
+            "style" => self.style = val.into(),
+            "glyph_size" => self.glyph_size = val.into(),
+            "accent" => self.accent = val.into(),
+            "fps_cap" => self.fps_cap = val.parse().unwrap_or(30),
+            "hdr" => self.hdr = val.into(),
+            "highlight" => self.highlight = val.parse().unwrap_or(60),
+            "peak_nits" => self.peak_nits = val.parse().unwrap_or(600.0),
+            "effects" => self.effects = val.into(),
+            "audio_source" => self.audio_source = val.into(),
+            "audio_level" => self.audio_level = val.into(),
+            "paused" => self.paused = val == "true",
+            "oled_care" => self.oled_care = val == "true",
+            "idle_dim_min" => self.idle_dim_min = val.parse().unwrap_or(10),
+            "idle_black_min" => self.idle_black_min = val.parse().unwrap_or(30),
+            "auto_reroll_min" => self.auto_reroll_min = val.parse().unwrap_or(25),
+            _ => return false,
+        }
+        true
     }
 
     pub fn save(&self) {

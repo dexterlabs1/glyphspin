@@ -7,31 +7,13 @@ use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::DirectComposition::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::Graphics::Dxgi::*;
+use super::super::Surface;
+use glyphspin_core::engine::Consts;
+use glyphspin_core::logf;
 use windows::core::{Interface, Result};
 
-static VS: &[u8] = include_bytes!("../shaders/vs.cso");
-static PS: &[u8] = include_bytes!("../shaders/ps.cso");
-
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct Consts {
-    pub grid_origin: [f32; 2],
-    pub cell: [f32; 2],
-    pub grid_dim: [u32; 2],
-    pub atlas_cols: u32,
-    pub hdr: u32,
-    pub bands: [[f32; 4]; 6],
-    pub amber: [f32; 4],
-    pub glow_col: [f32; 4],
-    pub white: f32,
-    pub peak: f32,
-    pub highlight: f32,
-    pub glow_gain: f32,
-    pub bright: f32,
-    pub fx_bright: f32,
-    pub bg_dim: f32,
-    pub pad0: f32,
-}
+static VS: &[u8] = include_bytes!("../../../shaders/vs.cso");
+static PS: &[u8] = include_bytes!("../../../shaders/ps.cso");
 
 pub struct Gpu {
     pub device: ID3D11Device,
@@ -76,7 +58,7 @@ impl Gpu {
                                              D3D11_SDK_VERSION, Some(&mut device), None, Some(&mut ctx));
                     match &last {
                         Ok(()) => break,
-                        Err(e) => crate::logf!("D3D11CreateDevice({drv:?}, flags {:#x}): {e:?}", flags.0),
+                        Err(e) => logf!("D3D11CreateDevice({drv:?}, flags {:#x}): {e:?}", flags.0),
                     }
                 }
                 if last.is_ok() {
@@ -89,7 +71,7 @@ impl Gpu {
             let dxgi_dev: IDXGIDevice = device.cast()?;
             let _ = dxgi_dev.cast::<IDXGIDevice1>().map(|d| d.SetMaximumFrameLatency(1));
             let dcomp: IDCompositionDevice =
-                DCompositionCreateDevice(&dxgi_dev).inspect_err(|e| crate::logf!("DCompositionCreateDevice: {e:?}"))?;
+                DCompositionCreateDevice(&dxgi_dev).inspect_err(|e| logf!("DCompositionCreateDevice: {e:?}"))?;
             let visual = dcomp.CreateVisual()?;
 
             let mut vs = None;
@@ -167,100 +149,6 @@ impl Gpu {
         }
     }
 
-    /// Upload the glyph atlas (R8 coverage, `w`x`h`).
-    pub fn set_atlas(&mut self, pixels: &[u8], w: u32, h: u32) -> Result<()> {
-        unsafe {
-            let desc = D3D11_TEXTURE2D_DESC {
-                Width: w,
-                Height: h,
-                MipLevels: 1,
-                ArraySize: 1,
-                Format: DXGI_FORMAT_R8_UNORM,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                Usage: D3D11_USAGE_IMMUTABLE,
-                BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-                ..Default::default()
-            };
-            let init = D3D11_SUBRESOURCE_DATA { pSysMem: pixels.as_ptr() as *const _, SysMemPitch: w, SysMemSlicePitch: 0 };
-            let mut tex = None;
-            self.device.CreateTexture2D(&desc, Some(&init), Some(&mut tex))?;
-            let mut srv = None;
-            self.device.CreateShaderResourceView(&tex.unwrap(), None, Some(&mut srv))?;
-            self.atlas = srv;
-            Ok(())
-        }
-    }
-
-    /// Upload the cell grid: 4 halfs per cell (glyph, level, tint, glow).
-    pub fn upload_cells(&mut self, data: &[u16], cols: u32, rows: u32) -> Result<()> {
-        unsafe {
-            let need_new = match &self.cells {
-                Some((_, _, c, r)) => *c != cols || *r != rows,
-                None => true,
-            };
-            if need_new {
-                let desc = D3D11_TEXTURE2D_DESC {
-                    Width: cols,
-                    Height: rows,
-                    MipLevels: 1,
-                    ArraySize: 1,
-                    Format: DXGI_FORMAT_R16G16B16A16_FLOAT,
-                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                    Usage: D3D11_USAGE_DYNAMIC,
-                    BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-                    CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-                    ..Default::default()
-                };
-                let mut tex = None;
-                self.device.CreateTexture2D(&desc, None, Some(&mut tex))?;
-                let tex = tex.unwrap();
-                let mut srv = None;
-                self.device.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
-                self.cells = Some((tex, srv.unwrap(), cols, rows));
-            }
-            let (tex, _, _, _) = self.cells.as_ref().unwrap();
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            self.ctx.Map(tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m))?;
-            let row_bytes = cols as usize * 8;
-            for y in 0..rows as usize {
-                let src = &data[y * cols as usize * 4..(y + 1) * cols as usize * 4];
-                std::ptr::copy_nonoverlapping(src.as_ptr() as *const u8, (m.pData as *mut u8).add(y * m.RowPitch as usize),
-                                              row_bytes);
-            }
-            self.ctx.Unmap(tex, 0);
-            Ok(())
-        }
-    }
-
-    /// Draw one frame. When `readback` is set, the frame is also copied to the CPU before presenting and returned as
-    /// raw texels (8 bytes per pixel for FP16, 4 for BGRA8) with the row pitch.
-    pub fn draw(&mut self, consts: &Consts, readback: bool) -> Result<Option<(Vec<u8>, usize)>> {
-        unsafe {
-            let (Some(rtv), Some(swap)) = (self.rtv.clone(), self.swap.clone()) else { return Ok(None) };
-            self.ctx.UpdateSubresource(&self.cb, 0, None, consts as *const Consts as *const _, 0, 0);
-            self.ctx.OMSetRenderTargets(Some(&[Some(rtv.clone())]), None);
-            let vp = D3D11_VIEWPORT { TopLeftX: 0.0, TopLeftY: 0.0, Width: self.width as f32, Height: self.height as f32,
-                                      MinDepth: 0.0, MaxDepth: 1.0 };
-            self.ctx.RSSetViewports(Some(&[vp]));
-            self.ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            self.ctx.IASetInputLayout(None);
-            self.ctx.VSSetShader(&self.vs, None);
-            self.ctx.PSSetShader(&self.ps, None);
-            self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.cb.clone())]));
-            let cells = self.cells.as_ref().map(|c| c.1.clone());
-            self.ctx.PSSetShaderResources(0, Some(&[cells, self.atlas.clone()]));
-            self.ctx.Draw(3, 0);
-
-            let mut out = None;
-            if readback {
-                out = Some(self.read_back(&swap)?);
-            }
-            let hr = swap.Present(1, DXGI_PRESENT(0));
-            hr.ok()?;
-            Ok(out)
-        }
-    }
-
     unsafe fn read_back(&self, swap: &IDXGISwapChain1) -> Result<(Vec<u8>, usize)> {
         unsafe {
             let back: ID3D11Texture2D = swap.GetBuffer(0)?;
@@ -306,11 +194,109 @@ impl Gpu {
         }
     }
 
-    pub fn ready(&self) -> bool {
-        self.rtv.is_some()
-    }
-
     pub fn device_lost(&self) -> bool {
         unsafe { self.device.GetDeviceRemovedReason().is_err() }
+    }
+}
+
+impl Surface for Gpu {
+    type Error = windows::core::Error;
+
+    /// Upload the glyph atlas (R8 coverage, `w`x`h`).
+    fn set_atlas(&mut self, pixels: &[u8], w: u32, h: u32) -> Result<()> {
+        unsafe {
+            let desc = D3D11_TEXTURE2D_DESC {
+                Width: w,
+                Height: h,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: DXGI_FORMAT_R8_UNORM,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Usage: D3D11_USAGE_IMMUTABLE,
+                BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+                ..Default::default()
+            };
+            let init = D3D11_SUBRESOURCE_DATA { pSysMem: pixels.as_ptr() as *const _, SysMemPitch: w, SysMemSlicePitch: 0 };
+            let mut tex = None;
+            self.device.CreateTexture2D(&desc, Some(&init), Some(&mut tex))?;
+            let mut srv = None;
+            self.device.CreateShaderResourceView(&tex.unwrap(), None, Some(&mut srv))?;
+            self.atlas = srv;
+            Ok(())
+        }
+    }
+
+    /// Upload the cell grid: 4 halfs per cell (glyph, level, tint, glow).
+    fn upload_cells(&mut self, data: &[u16], cols: u32, rows: u32) -> Result<()> {
+        unsafe {
+            let need_new = match &self.cells {
+                Some((_, _, c, r)) => *c != cols || *r != rows,
+                None => true,
+            };
+            if need_new {
+                let desc = D3D11_TEXTURE2D_DESC {
+                    Width: cols,
+                    Height: rows,
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    Format: DXGI_FORMAT_R16G16B16A16_FLOAT,
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                    Usage: D3D11_USAGE_DYNAMIC,
+                    BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+                    CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
+                    ..Default::default()
+                };
+                let mut tex = None;
+                self.device.CreateTexture2D(&desc, None, Some(&mut tex))?;
+                let tex = tex.unwrap();
+                let mut srv = None;
+                self.device.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
+                self.cells = Some((tex, srv.unwrap(), cols, rows));
+            }
+            let (tex, _, _, _) = self.cells.as_ref().unwrap();
+            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+            self.ctx.Map(tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m))?;
+            let row_bytes = cols as usize * 8;
+            for y in 0..rows as usize {
+                let src = &data[y * cols as usize * 4..(y + 1) * cols as usize * 4];
+                std::ptr::copy_nonoverlapping(src.as_ptr() as *const u8, (m.pData as *mut u8).add(y * m.RowPitch as usize),
+                                              row_bytes);
+            }
+            self.ctx.Unmap(tex, 0);
+            Ok(())
+        }
+    }
+
+    /// Draw one frame. When `readback` is set, the frame is also copied to the CPU before presenting and returned as
+    /// raw texels (8 bytes per pixel for FP16, 4 for BGRA8) with the row pitch.
+    fn draw(&mut self, consts: &Consts, readback: bool) -> Result<Option<(Vec<u8>, usize)>> {
+        unsafe {
+            let (Some(rtv), Some(swap)) = (self.rtv.clone(), self.swap.clone()) else { return Ok(None) };
+            self.ctx.UpdateSubresource(&self.cb, 0, None, consts as *const Consts as *const _, 0, 0);
+            self.ctx.OMSetRenderTargets(Some(&[Some(rtv.clone())]), None);
+            let vp = D3D11_VIEWPORT { TopLeftX: 0.0, TopLeftY: 0.0, Width: self.width as f32, Height: self.height as f32,
+                                      MinDepth: 0.0, MaxDepth: 1.0 };
+            self.ctx.RSSetViewports(Some(&[vp]));
+            self.ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            self.ctx.IASetInputLayout(None);
+            self.ctx.VSSetShader(&self.vs, None);
+            self.ctx.PSSetShader(&self.ps, None);
+            self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.cb.clone())]));
+            let cells = self.cells.as_ref().map(|c| c.1.clone());
+            self.ctx.PSSetShaderResources(0, Some(&[cells, self.atlas.clone()]));
+            self.ctx.Draw(3, 0);
+
+            let mut out = None;
+            if readback {
+                out = Some(self.read_back(&swap)?);
+            }
+            let hr = swap.Present(1, DXGI_PRESENT(0));
+            hr.ok()?;
+            Ok(out)
+        }
+    }
+
+    fn ready(&self) -> bool {
+        self.rtv.is_some()
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "glyphspin-core"
+version.workspace = true
+edition = "2024"
+description = "Platform-free core of Glyphspin: shapes, rasteriser, scene, effects, OLED care, settings, audio analysis"
+license = "MIT"
+publish = false
+
+[dependencies]

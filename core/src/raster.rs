@@ -2,7 +2,7 @@
 //! and reduce each cell to one glyph and one of five brightness bands. Works only inside the object's bounding box,
 //! so the cost follows the object, not the screen.
 
-use crate::glyphs::{TILE_BRAILLE, TILE_DOTS};
+use crate::atlas::{TILE_BRAILLE, TILE_DOTS};
 use crate::shapes::{Geom, Kind, Shape, V3, dot, norm};
 
 pub const CAM_D: f32 = 4.2;

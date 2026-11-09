@@ -1,4 +1,4 @@
-//! Small helpers: half floats, a log file, BMP writing for frame dumps, wide strings.
+//! Small helpers: half floats, a log file, BMP writing for frame dumps, colour conversions.
 
 use std::io::Write;
 use std::sync::Mutex;
@@ -52,22 +52,16 @@ pub fn f16_to_f32(h: u16) -> f32 {
     f32::from_bits(bits)
 }
 
-pub fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
+/// The platform's settings + log folder (%APPDATA%\Glyphspin, ~/Library/Application Support/Glyphspin). Set once at
+/// startup by the platform; asked for on every use, so the folder is (re)created when needed.
+static APP_DIR: std::sync::OnceLock<fn() -> std::path::PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_app_dir(f: fn() -> std::path::PathBuf) {
+    let _ = APP_DIR.set(f);
 }
 
 pub fn app_dir() -> std::path::PathBuf {
-    let base = std::env::var_os("APPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    let d = base.join("Glyphspin");
-    if !d.exists() {
-        let _ = std::fs::create_dir_all(&d);
-        // one-time migration from the pre-release name
-        let old = base.join("ascii-wallpaper").join("settings.json");
-        if old.exists() {
-            let _ = std::fs::copy(&old, d.join("settings.json"));
-        }
-    }
-    d
+    APP_DIR.get().map(|f| f()).unwrap_or_else(std::env::temp_dir)
 }
 
 static LOG: Mutex<Option<std::fs::File>> = Mutex::new(None);

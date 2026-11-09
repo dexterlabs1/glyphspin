@@ -1,21 +1,30 @@
 [package]
 name = "glyphspin"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
-description = "A 3D object drawn in text glyphs, turning slowly as your live Windows wallpaper"
+description = "A 3D object drawn in text glyphs, turning slowly as your live Windows or macOS wallpaper"
 license = "MIT"
 repository = "https://github.com/dexterlabs1/glyphspin"
 readme = "README.md"
-keywords = ["wallpaper", "windows", "ascii", "hdr", "desktop"]
+keywords = ["wallpaper", "windows", "macos", "ascii", "hdr"]
 categories = ["visualization"]
 
-[build-dependencies]
+[workspace]
+members = ["core"]
+
+[workspace.package]
+version = "0.1.0"
+
+[target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
 [dependencies]
+glyphspin-core = { path = "core" }
+
+[target.'cfg(windows)'.dependencies]
 windows-core = "0.62"
 
-[dependencies.windows]
+[target.'cfg(windows)'.dependencies.windows]
 version = "0.62"
 features = [
     "Win32_Foundation",
@@ -56,6 +65,19 @@ features = [
     "Foundation",
     "Foundation_Collections",
 ]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.5"
+block2 = "0.6.2"
+dispatch2 = "0.3.1"
+objc2-foundation = "0.3.2"
+objc2-app-kit = "0.3.2"
+objc2-metal = "0.3.2"
+objc2-quartz-core = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-core-text = "0.3.2"
+objc2-service-management = "0.3.2"
 
 [profile.release]
 opt-level = 3

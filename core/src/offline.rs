@@ -9,10 +9,15 @@
 //! --burn simulates SECONDS of display at the idle frame rate (12 fps) as fast as the CPU allows, accumulates
 //! per-pixel linear luminance every --sample seconds (default 5), prints max / mean / hottest pixel, and writes a
 //! heat map (1920x1080, normalised to --heat-scale or to its own max). --idle simulates nobody touching the PC.
+//!
+//! Cross-platform checks: `--atlas procedural` draws every tile procedurally with the cell width exactly at the target
+//! (no OS font, so the grid and pixels are the same on every platform); `--cells PATH` writes the last frame's cell
+//! grid (4 halfs per cell: glyph, level, tint, glow) and prints its FNV-1a hash.
 
 use crate::raster::Style;
 use crate::scene::{AudioFrame, Params, Scene};
-use crate::{glyphs, oled, settings, shapes, util};
+use crate::atlas::{self, ATLAS_COLS, Atlas, TILE_COUNT};
+use crate::{oled, settings, shapes, util};
 
 struct Shader {
     w: u32,
@@ -69,8 +74,8 @@ impl Shader {
                 let d = f.data[i];
                 let lx = (px - cx as f32 * cw) as u32;
                 let ly = (py - cy as f32 * ch) as u32;
-                let tx = (g % glyphs::ATLAS_COLS) * self.cw + lx;
-                let ty = (g / glyphs::ATLAS_COLS) * self.ch + ly;
+                let tx = (g % ATLAS_COLS) * self.cw + lx;
+                let ty = (g / ATLAS_COLS) * self.ch + ly;
                 let a = self.atlas[(ty * self.atlas_w + tx) as usize] as f32 / 255.0;
                 if a > 0.0 {
                     let mut gc = self.band(d[0]);
@@ -122,7 +127,8 @@ impl Shader {
     }
 }
 
-pub fn run(args: &[String]) -> i32 {
+/// `build_atlas` is the platform's font atlas for a target cell width (GDI on Windows, Core Text on macOS).
+pub fn run(args: &[String], build_atlas: fn(u32) -> Atlas) -> i32 {
     let arg = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).cloned();
     let out = arg("--offline").unwrap_or_else(|| "offline.bmp".into());
     let seed: u64 = arg("--seed").and_then(|v| v.parse().ok()).unwrap_or(7);
@@ -162,13 +168,18 @@ pub fn run(args: &[String]) -> i32 {
     let user4: Option<(f32, f32)> = args.iter().position(|a| a == "--user4")
         .map(|i| (args[i + 1].parse().unwrap_or(0.0), args[i + 2].parse().unwrap_or(0.0)));
 
-    // grid exactly like main::rebuild_grid (medium glyphs, one spare cell for the orbit)
-    let atlas = glyphs::build(((h as f32 / 84.0) / 2.0).round() as u32);
+    // grid exactly like the live app's (medium glyphs, one spare cell for the orbit)
+    let cw_target = ((h as f32 / 84.0) / 2.0).round() as u32;
+    let atlas = match arg("--atlas").as_deref() {
+        Some("procedural") => atlas::procedural(cw_target),
+        _ => build_atlas(cw_target),
+    };
+    let cells_out = arg("--cells");
     let (cw, ch) = (atlas.cw, atlas.ch);
     let cols = (w.div_ceil(cw) + 2) as usize;
     let rows = (h.div_ceil(ch) + 2) as usize;
     let base = ((w as i32 - (cols as u32 * cw) as i32) / 2, (h as i32 - (rows as u32 * ch) as i32) / 2);
-    let coverage = oled::tile_coverage(&atlas.pixels, atlas.w, cw, ch, glyphs::ATLAS_COLS, glyphs::TILE_COUNT);
+    let coverage = oled::tile_coverage(&atlas.pixels, atlas.w, cw, ch, ATLAS_COLS, TILE_COUNT);
     let mut scene = Scene::new(seed, shape);
     if !care {
         scene.oled_k = 0.0;
@@ -316,6 +327,12 @@ pub fn run(args: &[String]) -> i32 {
               | oled {} | dim {:.2} | apl gain {:.2} | auto rerolls {} | wall {:.1} s",
              scene.shape_name(), cols, rows, cw, ch, compose_ms / n, worst, total_frames, scene.object_cells(), care,
              dimmer.v, apl.k, rerolls, t_start.elapsed().as_secs_f32());
+    if let Some(path) = cells_out {
+        let bytes: Vec<u8> = scene.cells.iter().flat_map(|v| v.to_le_bytes()).collect();
+        let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x100_0000_01b3));
+        let _ = std::fs::write(&path, &bytes);
+        println!("cells {} halfs, fnv1a {hash:016x}, font '{}'", scene.cells.len(), atlas.face);
+    }
 
     if burn.is_some() {
         let samples = samples.max(1) as f32;
