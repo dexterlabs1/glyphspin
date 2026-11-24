@@ -5,29 +5,15 @@
 use crate::shapes::{Geom, Kind, Rng, V3, add, cross, len, norm, scale, sstep, sub};
 use std::f32::consts::PI;
 
-pub const NAMES: [&str; 10] =
-    ["tesseract", "gyroid", "attractor", "supershape", "klein", "armillary", "metaballs", "nebula", "calabi_yau",
-     "mobius_stack"];
+pub const NAMES: [&str; 13] =
+    ["tesseract", "gyroid", "attractor", "supershape", "klein", "armillary", "metaballs", "calabi_yau", "helix",
+     "shell", "crystal", "hyperboloid", "membrane"];
 
 const TAU: f32 = 2.0 * PI;
 
 fn grid(n: usize, a: f32, b: f32, endpoint: bool) -> impl Iterator<Item = f32> {
     let d = if endpoint { (n.max(2) - 1) as f32 } else { n as f32 };
     (0..n).map(move |i| a + (b - a) * i as f32 / d)
-}
-
-/// Positions and unit normals of a parametric surface by central differences, appended to `g`.
-fn surface<F: Fn(f32, f32) -> V3>(f: F, us: &[f32], vs: &[f32], g: &mut Geom) {
-    let e = 1e-3;
-    for &v in vs {
-        for &u in us {
-            let p = f(u, v);
-            let pu = sub(f(u + e, v), f(u - e, v));
-            let pv = sub(f(u, v + e), f(u, v - e));
-            g.pts.push(p);
-            g.nrm.push(norm(cross(pu, pv)));
-        }
-    }
 }
 
 fn fit(g: &mut Geom, target: f32) {
@@ -53,12 +39,20 @@ enum P {
     Gyroid { k: f32, phase: f32, rate: f32, pts: Vec<V3>, nrm: Vec<V3> },
     Attractor { traj: Vec<V3>, arc: Vec<f32>, speed: f32, window: f32 },
     Super { a: [f32; 8], b: [f32; 8], phase: f32, period: f32, us: Vec<f32>, vs: Vec<f32> },
-    Klein { phase: f32, rate: f32, tab: Vec<[f32; 8]> },
+    /// per point: spine A, tube offset B, then dA/du, dB/du, dB/dv
+    Klein { phase: f32, rate: f32, tab: Vec<[V3; 5]> },
     Armillary { rings: Vec<(f32, V3, V3, f32, f32)> },
     Metaballs { balls: Vec<(f32, V3, V3, f32, f32)>, dirs: Vec<V3> },
-    Nebula { stars: Vec<V3>, drift: Vec<(V3, f32, f32)>, edges: Vec<(usize, usize)> },
     Calabi { n: usize, phase: f32, rate: f32, us: Vec<f32>, vs: Vec<f32>, k: f32, tab: Vec<[f32; 12]> },
-    MobiusStack { strips: Vec<(f32, f32, f32, f32, f32, f32)>, us: Vec<f32>, vs: Vec<f32> },
+    Helix { turns: f32, rungs: usize, spin: f32, wind: f32, ph: [f32; 2] },
+    /// `arc` is each point's position along the spiral (0 apex .. 1 opening), for the growing lip
+    Shell { turns: f32, grow: f32, spire: f32, tube: f32, phase: f32, rate: f32, pts: Vec<V3>, nrm: Vec<V3>,
+            arc: Vec<f32> },
+    /// triangles (a, b, face centre): the third corner is the face centre pushed outward
+    Crystal { tris: Vec<(V3, V3, V3)>, hmax: f32, phase: f32, rate: f32 },
+    Hyper { n: usize, twist: f32, phase: f32, rate: f32 },
+    /// per point: x, y, then (F, dF/dx, dF/dy) for each of the two standing waves
+    Membrane { modes: [(f32, f32); 2], amp: f32, rates: [f32; 2], ph: [f32; 2], tab: Vec<[f32; 8]> },
 }
 
 impl X {
@@ -78,7 +72,7 @@ impl X {
                 x
             }
             "gyroid" => mk("gyroid", Kind::Surface, true, vec![([1.0, 0.0, 0.0], -0.4)],
-                           P::Gyroid { k: rng.uniform(1.3, 1.8), phase: rng.uniform(0.0, TAU),
+                           P::Gyroid { k: rng.uniform(1.5, 2.0), phase: rng.uniform(0.0, TAU),
                                        rate: rng.uniform(0.05, 0.09), pts: vec![], nrm: vec![] }),
             "attractor" => {
                 let (traj, arc) = if rng.f() < 0.5 { lorenz(rng) } else { aizawa(rng) };
@@ -90,7 +84,7 @@ impl X {
                 let pick = |rng: &mut Rng| -> [f32; 8] {
                     let presets = [[6.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 1.0], [7.0, 0.2, 1.7, 1.7, 7.0, 0.2, 1.7, 1.7],
                                    [5.0, 0.1, 1.7, 1.7, 1.0, 0.3, 0.5, 0.5], [4.0, 1.0, 1.0, 1.0, 4.0, 1.0, 1.0, 1.0],
-                                   [8.0, 0.5, 0.5, 8.0, 2.0, 1.0, 1.0, 1.0], [3.0, 0.5, 1.7, 1.7, 6.0, 1.0, 1.0, 1.0]];
+                                   [3.0, 4.5, 10.0, 10.0, 4.0, 12.0, 15.0, 15.0], [3.0, 0.5, 1.7, 1.7, 6.0, 1.0, 1.0, 1.0]];
                     presets[(rng.next_u64() % presets.len() as u64) as usize]
                 };
                 let a = pick(rng);
@@ -102,7 +96,7 @@ impl X {
                    P::Super { a, b, phase: rng.uniform(0.0, 1.0), period: rng.uniform(80.0, 120.0), us: vec![],
                               vs: vec![] })
             }
-            "klein" => mk("klein", Kind::Surface, true, vec![([1.0, 0.0, 0.0], -0.7)],
+            "klein" => mk("klein", Kind::Surface, true, vec![([0.0, 0.0, 1.0], 0.25), ([1.0, 0.0, 0.0], -0.3)],
                           P::Klein { phase: rng.uniform(0.0, TAU), rate: rng.uniform(0.1, 0.18), tab: vec![] }),
             "armillary" => {
                 let n = rng.pick(&[4usize, 5, 6]);
@@ -120,20 +114,16 @@ impl X {
                 let n = rng.pick(&[4usize, 5, 6]);
                 let balls = (0..n)
                     .map(|_| {
-                        let r = rng.uniform(0.2, 0.3);
-                        let ax = [rng.uniform(0.25, 0.5), rng.uniform(0.25, 0.5), rng.uniform(0.15, 0.35)];
+                        let r = rng.uniform(0.2, 0.27);
+                        let ax = [rng.uniform(0.3, 0.55), rng.uniform(0.3, 0.55), rng.uniform(0.2, 0.4)];
                         let rates = [rng.uniform(0.08, 0.2), rng.uniform(0.08, 0.2), rng.uniform(0.08, 0.2)];
                         (r, ax, rates, rng.uniform(0.0, TAU), rng.uniform(0.0, TAU))
                     })
                     .collect();
                 mk("metaballs", Kind::Surface, false, vec![], P::Metaballs { balls, dirs: vec![] })
             }
-            "nebula" => {
-                let (stars, drift, edges) = nebula(rng);
-                mk("nebula", Kind::Lines, false, vec![], P::Nebula { stars, drift, edges })
-            }
             "calabi_yau" => {
-                let n = rng.pick(&[3usize, 4, 5, 5]);
+                let n = rng.pick(&[4usize, 4, 5, 5]);
                 let mut x = mk("calabi_yau", Kind::Surface, true, vec![([1.0, 0.0, 0.0], -0.4)],
                                P::Calabi { n, phase: rng.uniform(0.0, TAU), rate: rng.uniform(0.03, 0.06), us: vec![],
                                            vs: vec![], k: 1.0, tab: vec![] });
@@ -147,18 +137,48 @@ impl X {
                 }
                 x
             }
+            "helix" => mk("helix", Kind::Lines, false, vec![([0.0, 0.0, 1.0], 0.45), ([1.0, 0.0, 0.0], 0.25)],
+                          P::Helix { turns: rng.pick(&[2.0f32, 2.5, 3.0]), rungs: rng.pick(&[8usize, 10, 12]),
+                                     spin: rng.uniform(0.12, 0.2) * rng.sign(), wind: rng.uniform(0.05, 0.09),
+                                     ph: [rng.uniform(0.0, TAU), rng.uniform(0.0, TAU)] }),
+            "shell" => {
+                // (turns, growth per turn, spire height, tube radius, tilt): a flat ammonite coil or a taller spire
+                let (turns, grow, spire, tube, tilt) = rng.pick(&[(4.0f32, 1.5f32, 0.0f32, 0.22f32, -0.45f32),
+                                                                   (4.5, 1.45, 1.2, 0.26, -0.9),
+                                                                   (5.0, 1.4, 2.6, 0.3, -1.2)]);
+                mk("shell", Kind::Surface, true, vec![([0.0, 0.0, 1.0], 0.3), ([1.0, 0.0, 0.0], tilt)],
+                   P::Shell { turns, grow, spire, tube, phase: rng.uniform(0.0, TAU), rate: rng.uniform(0.06, 0.1),
+                              pts: vec![], nrm: vec![], arc: vec![] })
+            }
+            "crystal" => {
+                // a solid whose faces rise into pyramids and settle back: icosahedron, dodecahedron or octahedron
+                let (faces, hmax) = match rng.next_u64() % 3 {
+                    0 => (icosahedron(), 0.95),
+                    1 => (dodecahedron(), 1.25),
+                    _ => (octahedron(), 2.0),
+                };
+                let mut tris = Vec::new();
+                for f in &faces {
+                    let m = scale(f.iter().fold([0.0; 3], |a, p| add(a, *p)), 1.0 / f.len() as f32);
+                    for i in 0..f.len() {
+                        tris.push((f[i], f[(i + 1) % f.len()], m));
+                    }
+                }
+                mk("crystal", Kind::Surface, false, vec![([1.0, 0.0, 0.0], -0.35), ([0.0, 1.0, 0.0], 0.3)],
+                   P::Crystal { tris, hmax, phase: rng.uniform(0.0, TAU), rate: rng.uniform(0.07, 0.11) })
+            }
+            "hyperboloid" => mk("hyperboloid", Kind::Lines, false, vec![([0.0, 0.0, 1.0], 0.3), ([1.0, 0.0, 0.0], 0.4)],
+                                P::Hyper { n: rng.pick(&[14usize, 18, 22]), twist: rng.uniform(1.9, 2.5),
+                                           phase: rng.uniform(0.0, TAU), rate: rng.uniform(0.07, 0.11) }),
             _ => {
-                let strips = (0..3)
-                    .map(|i| {
-                        let r = 0.42 + 0.25 * i as f32;
-                        let w = 0.1 + 0.02 * i as f32;
-                        let twists = rng.pick(&[1.0f32, 2.0, 3.0]);
-                        let z = (i as f32 - 1.0) * 0.18;
-                        (r, w, twists, rng.uniform(0.05, 0.12) * rng.sign(), rng.uniform(0.0, TAU), z)
-                    })
-                    .collect();
-                mk("mobius_stack", Kind::Surface, true, vec![([1.0, 0.0, 0.0], -0.9)],
-                   P::MobiusStack { strips, us: vec![], vs: vec![] })
+                // two standing waves of a drum skin, (angular, radial) node counts
+                let pairs = [((0.0f32, 2.0f32), (3.0f32, 1.0f32)), ((2.0, 1.0), (0.0, 3.0)), ((1.0, 2.0), (4.0, 1.0)),
+                             ((0.0, 2.0), (2.0, 2.0))];
+                let (a, b) = rng.pick(&pairs);
+                mk("membrane", Kind::Surface, true, vec![([1.0, 0.0, 0.0], -0.95)],
+                   P::Membrane { modes: [a, b], amp: rng.uniform(0.18, 0.24),
+                                 rates: [rng.uniform(0.35, 0.5), rng.uniform(0.22, 0.32)],
+                                 ph: [rng.uniform(0.0, TAU), rng.uniform(0.0, TAU)], tab: vec![] })
             }
         }
     }
@@ -171,9 +191,8 @@ impl X {
         self.ppu = ppu;
         let (u1, v1) = match self.p {
             P::Super { .. } => (self.n(TAU * 0.75, 1.15), self.n(PI * 0.75, 1.15)),
-            P::Klein { .. } => (self.n(TAU * 0.75, 1.15), self.n(TAU * 0.3, 1.15)),
+            P::Klein { .. } => (self.n(4.2, 1.15), self.n(1.6, 1.15)),
             P::Calabi { n, .. } => (self.n(1.1 / n as f32 * 2.0, 1.2), self.n(0.9 / n as f32 * 2.0, 1.2)),
-            P::MobiusStack { .. } => (self.n(TAU * 0.95, 1.2), self.n(0.3, 1.4)),
             _ => (0, 0),
         };
         match &mut self.p {
@@ -182,17 +201,106 @@ impl X {
                 *vs = grid(v1, -PI / 2.0 + 0.01, PI / 2.0 - 0.01, true).collect();
             }
             P::Klein { tab, .. } => {
-                // the figure-8 Klein bottle splits into a(u,v) = r + q(u,v) and w(u,v); r is the only thing that
-                // drifts, so q, w and their partial derivatives are tabulated once: [u, cos u, sin u, q, w, q_u+.., ..]
+                // the classic bottle: a tube of radius rr(u) swept along a spine A(u), p = A + rho B. Only rho (the
+                // tube's breathing) drifts, so A, B and their partial derivatives are tabulated once.
                 tab.clear();
-                let q = |u: f32, v: f32| (u / 2.0).cos() * v.sin() - (u / 2.0).sin() * (2.0 * v).sin();
-                let w = |u: f32, v: f32| (u / 2.0).sin() * v.sin() + (u / 2.0).cos() * (2.0 * v).sin();
+                let spine = |u: f32| -> V3 { [6.0 * u.cos() * (1.0 + u.sin()), 16.0 * u.sin(), 0.0] };
+                let tube = |u: f32, v: f32| -> V3 {
+                    let rr = 4.0 * (1.0 - u.cos() / 2.0);
+                    if u.rem_euclid(TAU) < PI {
+                        [rr * u.cos() * v.cos(), rr * u.sin() * v.cos(), rr * v.sin()]
+                    } else {
+                        [-rr * v.cos(), 0.0, rr * v.sin()]
+                    }
+                };
+                // centre and scale from a coarse pass at the widest breath
+                let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+                let coarse: Vec<V3> = grid(160, 0.0, TAU, false)
+                    .flat_map(|u| grid(24, 0.0, TAU, false).map(move |v| (u, v)))
+                    .map(|(u, v)| add(spine(u), scale(tube(u, v), 1.06)))
+                    .collect();
+                for p in &coarse {
+                    for i in 0..3 {
+                        lo[i] = lo[i].min(p[i]);
+                        hi[i] = hi[i].max(p[i]);
+                    }
+                }
+                let c = scale(add(lo, hi), 0.5);
+                let k = 0.95 / coarse.iter().map(|p| len(sub(*p, c))).fold(0f32, f32::max).max(1e-6);
                 let e = 1e-3;
                 for v in grid(v1, 0.0, TAU, false) {
                     for u in grid(u1, 0.0, TAU, false) {
-                        tab.push([u, q(u, v), w(u, v), (q(u + e, v) - q(u - e, v)) / (2.0 * e),
-                                  (q(u, v + e) - q(u, v - e)) / (2.0 * e), (w(u + e, v) - w(u - e, v)) / (2.0 * e),
-                                  (w(u, v + e) - w(u, v - e)) / (2.0 * e), 0.0]);
+                        tab.push([scale(sub(spine(u), c), k), scale(tube(u, v), k),
+                                  sub(spine(u + e), spine(u - e)), sub(tube(u + e, v), tube(u - e, v)),
+                                  sub(tube(u, v + e), tube(u, v - e))]);
+                    }
+                }
+            }
+            P::Shell { turns, grow, spire, tube, pts, nrm, arc, .. } => {
+                // a tube that widens by `grow` each turn around the axis; e runs from ~0 at the apex to 1 at the lip
+                let gr = grow.ln() * *turns;
+                let e0 = (-gr).exp();
+                let (turns, spire, tube) = (*turns, *spire, *tube);
+                let f = move |s: f32, u: f32| -> V3 {
+                    let e = (gr * (s - 1.0)).exp();
+                    let th = turns * TAU * s;
+                    let w = 1.0 + tube * u.cos();
+                    [e * w * th.cos(), e * w * th.sin(), e * (tube * u.sin() - spire)]
+                };
+                let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+                let coarse: Vec<V3> = grid(240, 0.0, 1.0, true)
+                    .flat_map(|s| grid(24, 0.0, TAU, false).map(move |u| f(s, u)))
+                    .collect();
+                for p in &coarse {
+                    for i in 0..3 {
+                        lo[i] = lo[i].min(p[i]);
+                        hi[i] = hi[i].max(p[i]);
+                    }
+                }
+                let c = scale(add(lo, hi), 0.5);
+                let k = 0.95 / coarse.iter().map(|p| len(sub(*p, c))).fold(0f32, f32::max).max(1e-6);
+                // even steps of arc length (which grows like e), so the apex isn't oversampled
+                let ns = ((turns * TAU * (1.0 - e0) / gr * k * ppu * 1.15) as usize).max(16);
+                let nu = ((TAU * tube * k * ppu * 1.15) as usize).max(8);
+                pts.clear();
+                nrm.clear();
+                arc.clear();
+                let d = 1e-3;
+                for i in 0..ns {
+                    let a = i as f32 / (ns - 1) as f32;
+                    let s = 1.0 + (e0 + (1.0 - e0) * a).ln() / gr;
+                    for u in grid(nu, 0.0, TAU, false) {
+                        pts.push(scale(sub(f(s, u), c), k));
+                        nrm.push(norm(cross(sub(f(s + d, u), f(s - d, u)), sub(f(s, u + d), f(s, u - d)))));
+                        arc.push(a);
+                    }
+                }
+            }
+            P::Membrane { modes, tab, .. } => {
+                let shape = |m: f32, n: f32, x: f32, y: f32| -> f32 {
+                    let rho = (x * x + y * y).sqrt() / 0.93;
+                    if m == 0.0 {
+                        ((n - 0.5) * PI * rho).cos()
+                    } else {
+                        (n * PI * rho).sin() * (m * y.atan2(x)).cos() * sstep(rho * 4.0)
+                    }
+                };
+                let n = ((0.93 * ppu * 1.15) as usize).max(8);
+                let e = 1e-3;
+                tab.clear();
+                for iy in -(n as i32)..=n as i32 {
+                    for ix in -(n as i32)..=n as i32 {
+                        let (x, y) = (0.93 * ix as f32 / n as f32, 0.93 * iy as f32 / n as f32);
+                        if x * x + y * y > 0.93 * 0.93 {
+                            continue;
+                        }
+                        let mut row = [x, y, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+                        for (j, &(m, nn)) in modes.iter().enumerate() {
+                            row[2 + 3 * j] = shape(m, nn, x, y);
+                            row[3 + 3 * j] = (shape(m, nn, x + e, y) - shape(m, nn, x - e, y)) / (2.0 * e);
+                            row[4 + 3 * j] = (shape(m, nn, x, y + e) - shape(m, nn, x, y - e)) / (2.0 * e);
+                        }
+                        tab.push(row);
                     }
                 }
             }
@@ -233,10 +341,6 @@ impl X {
                         }
                     }
                 }
-            }
-            P::MobiusStack { us, vs, .. } => {
-                *us = grid(u1, 0.0, TAU, false).collect();
-                *vs = grid(v1, -1.0, 1.0, true).collect();
             }
             P::Gyroid { k, pts, nrm, .. } => {
                 // sample the gyroid's zero set inside the unit sphere along grid lines on all three axes
@@ -293,7 +397,7 @@ impl X {
             }
             P::Metaballs { dirs, .. } => {
                 // directions on a sphere (Fibonacci), dense enough for the surface at this size
-                let n = ((4.0 * PI * 0.3 * 0.3) * ppu * ppu * 0.7) as usize;
+                let n = ((4.0 * PI * 0.28 * 0.28) * ppu * ppu * 0.8) as usize;
                 let n = n.clamp(300, 20000);
                 let ga = PI * (3.0 - 5f32.sqrt());
                 *dirs = (0..n)
@@ -349,7 +453,7 @@ impl X {
             }
             P::Gyroid { phase, rate, pts, nrm, .. } => {
                 // the clipping sphere breathes, so the sliced shell's rim keeps moving
-                let r = 0.72 + 0.26 * sstep(0.5 + 0.5 * (phase + t * rate).sin());
+                let r = 0.84 + 0.14 * sstep(0.5 + 0.5 * (phase + t * rate).sin());
                 for (p, n) in pts.iter().zip(nrm) {
                     if len(*p) <= r {
                         g.pts.push(*p);
@@ -390,29 +494,26 @@ impl X {
                 let x = (phase + t / period).rem_euclid(1.0);
                 let tri = 1.0 - (2.0 * x - 1.0).abs();
                 let m = sstep((tri - 0.3) / 0.4);
-                let p: Vec<f32> = (0..8).map(|i| a[i] + (b[i] - a[i]) * m).collect();
-                let sf = |th: f32, m: f32, n1: f32, n2: f32, n3: f32| -> f32 {
-                    let c = (m * th / 4.0).cos().abs().powf(n2);
-                    let s = (m * th / 4.0).sin().abs().powf(n3);
-                    (c + s).max(1e-6).powf(-1.0 / n1)
+                let sf = |th: f32, p: &[f32]| -> f32 {
+                    let c = (p[0] * th / 4.0).cos().abs().powf(p[2]);
+                    let s = (p[0] * th / 4.0).sin().abs().powf(p[3]);
+                    (c + s).max(1e-6).powf(-1.0 / p[1])
+                };
+                // the morph blends the two radius functions, not their parameters: a fractional symmetry count
+                // would tear the surface open along a seam
+                let rad = |th: f32, o: usize| -> f32 {
+                    let ra = sf(th, &a[o..o + 4]);
+                    if m < 1e-4 { ra } else { ra + (sf(th, &b[o..o + 4]) - ra) * m }
                 };
                 // separable: r1 depends on u only, r2 on v only, so the powf work is O(nu + nv)
                 let e = 1e-3;
                 let r1: Vec<(f32, f32, f32, f32)> = us
                     .iter()
-                    .map(|&u| {
-                        let r = sf(u, p[0], p[1], p[2], p[3]);
-                        let d = (sf(u + e, p[0], p[1], p[2], p[3]) - sf(u - e, p[0], p[1], p[2], p[3])) / (2.0 * e);
-                        (r, d, u.cos(), u.sin())
-                    })
+                    .map(|&u| (rad(u, 0), (rad(u + e, 0) - rad(u - e, 0)) / (2.0 * e), u.cos(), u.sin()))
                     .collect();
                 let r2: Vec<(f32, f32, f32, f32)> = vs
                     .iter()
-                    .map(|&v| {
-                        let r = sf(v, p[4], p[5], p[6], p[7]);
-                        let d = (sf(v + e, p[4], p[5], p[6], p[7]) - sf(v - e, p[4], p[5], p[6], p[7])) / (2.0 * e);
-                        (r, d, v.cos(), v.sin())
-                    })
+                    .map(|&v| (rad(v, 4), (rad(v + e, 4) - rad(v - e, 4)) / (2.0 * e), v.cos(), v.sin()))
                     .collect();
                 for &(b, db, cv, sv) in &r2 {
                     for &(a, da, cu, su) in &r1 {
@@ -426,17 +527,10 @@ impl X {
                 fit(g, 0.95);
             }
             P::Klein { phase, rate, tab } => {
-                // the figure-8 immersion of the Klein bottle: p = ((r+q) cos u, (r+q) sin u, w) / (r + 1.6)
-                let r = 2.0 + 0.25 * (phase + t * rate).sin();
-                let k = 1.0 / (r + 1.6);
-                for row in tab {
-                    let [u, q, w, qu, qv, wu, wv, _] = *row;
-                    let (su, cu) = u.sin_cos();
-                    let a = r + q;
-                    g.pts.push([a * cu * k, a * su * k, w * k]);
-                    let pu = [qu * cu - a * su, qu * su + a * cu, wu];
-                    let pv = [qv * cu, qv * su, wv];
-                    g.nrm.push(norm(cross(pu, pv)));
+                let rho = 0.98 + 0.08 * (phase + t * rate).sin();
+                for [a, b, au, bu, bv] in tab {
+                    g.pts.push(add(*a, scale(*b, rho)));
+                    g.nrm.push(norm(cross(add(*au, scale(*bu, rho)), *bv)));
                 }
             }
             P::Armillary { rings } => {
@@ -466,8 +560,11 @@ impl X {
                 let cs: Vec<(V3, f32)> = balls
                     .iter()
                     .map(|&(r, ax, rt, p1, p2)| {
-                        ([ax[0] * (rt[0] * t + p1).sin(), ax[1] * (rt[1] * t + p2).sin(),
-                          ax[2] * (rt[2] * t + p1 + p2).cos()], r)
+                        let c = [ax[0] * (rt[0] * t + p1).sin(), ax[1] * (rt[1] * t + p2).sin(),
+                                 ax[2] * (rt[2] * t + p1 + p2).cos()];
+                        // keep every ball inside the unit sphere without a hard stop
+                        let l = len(c);
+                        (scale(c, 0.66 * (l / 0.66).tanh() / l.max(1e-6)), r)
                     })
                     .collect();
                 let field = |p: V3| -> (f32, V3) {
@@ -504,38 +601,6 @@ impl X {
                     }
                 }
             }
-            P::Nebula { stars, drift, edges } => {
-                let pos: Vec<V3> = stars
-                    .iter()
-                    .zip(drift)
-                    .map(|(s, (a, rt, ph))| add(*s, scale(*a, (rt * t + ph).sin())))
-                    .collect();
-                // stars: tiny 3D crosses, so each reads as a cluster of dots
-                let cr = 1.2 / ppu;
-                for p in &pos {
-                    for d in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
-                        for k in -2..=2 {
-                            g.pts.push(add(*p, scale(d, cr * k as f32)));
-                        }
-                    }
-                }
-                // constellation lines between near neighbours, fading in and out with distance
-                for &(i, j) in edges {
-                    let (a, b) = (pos[i], pos[j]);
-                    let d = sub(b, a);
-                    let l = len(d);
-                    if l > 0.42 {
-                        continue;
-                    }
-                    let n = ((l * ppu * 1.2) as usize).max(3);
-                    for k in 1..n {
-                        if k % 2 == 0 {
-                            continue; // dotted, so lines stay lighter than the stars
-                        }
-                        g.pts.push(add(a, scale(d, k as f32 / n as f32)));
-                    }
-                }
-            }
             P::Calabi { phase, rate, k, tab, .. } => {
                 // Hanson's slice of the quintic: z1 = e^(2 pi i k1/n) cosh(x+iy)^(2/n),
                 // z2 = e^(2 pi i k2/n) (-i sinh(x+iy))^(2/n), shown as (Re z1, Re z2, cos a Im z1 + sin a Im z2)
@@ -549,22 +614,159 @@ impl X {
                     g.nrm.push(norm(cross(proj(r[4], r[5], r[6], r[7]), proj(r[8], r[9], r[10], r[11]))));
                 }
             }
-            P::MobiusStack { strips, us, vs } => {
-                for &(r, w, h, rate, ph, z) in strips {
-                    let rot = ph + rate * t;
-                    let f = |u: f32, v: f32| -> V3 {
-                        let rr = r + w * v * (h * u / 2.0).cos();
-                        let a = u + rot;
-                        [rr * a.cos(), rr * a.sin(), z + w * v * (h * u / 2.0).sin()]
-                    };
-                    // fewer samples on the inner strips
-                    let step = if r < 0.5 { 2 } else { 1 };
-                    let uu: Vec<f32> = us.iter().copied().step_by(step).collect();
-                    surface(f, &uu, vs, g);
+            P::Helix { turns, rungs, spin, wind, ph } => {
+                // two strands and their rungs; the pitch winds up and relaxes while the whole thing screws round
+                let (r, h) = (0.34, 0.86);
+                let tw = turns * (1.0 + 0.12 * (ph[1] + t * wind).sin()) * TAU;
+                let a0 = ph[0] + t * spin;
+                let n = (((tw * r).hypot(2.0 * h) * ppu * 1.7) as usize).max(16);
+                for strand in 0..2 {
+                    let off = a0 + PI * strand as f32;
+                    for i in 0..=n {
+                        let s = i as f32 / n as f32;
+                        let (sa, ca) = (tw * (s - 0.5) + off).sin_cos();
+                        g.pts.push([r * ca, h * (2.0 * s - 1.0), r * sa]);
+                    }
+                }
+                let total = (*rungs as f32 * turns).round() as usize;
+                let nr = ((2.0 * r * ppu * 1.7) as usize).max(4);
+                for j in 0..total {
+                    let s = (j as f32 + 0.5) / total as f32;
+                    let (sa, ca) = (tw * (s - 0.5) + a0).sin_cos();
+                    for i in 1..nr {
+                        let x = r * (2.0 * i as f32 / nr as f32 - 1.0);
+                        g.pts.push([x * ca, h * (2.0 * s - 1.0), x * sa]);
+                    }
+                }
+            }
+            P::Shell { phase, rate, pts, nrm, arc, .. } => {
+                // the lip grows and draws back
+                let cut = 0.8 + 0.2 * sstep(0.5 + 0.5 * (phase + t * rate).sin());
+                for ((p, n), a) in pts.iter().zip(nrm).zip(arc) {
+                    if *a <= cut {
+                        g.pts.push(*p);
+                        g.nrm.push(*n);
+                    }
+                }
+            }
+            P::Crystal { tris, hmax, phase, rate } => {
+                let h = hmax * sstep(0.5 + 0.5 * (phase + t * rate).sin());
+                let reach = len(tris[0].2) * (1.0 + h);
+                // the widest point stays put, so the stellation doesn't pump the size
+                let k = 0.95 / reach.max(1.0);
+                let step = ppu * 1.15;
+                for &(a, b, m) in tris {
+                    let (a, b, c) = (scale(a, k), scale(b, k), scale(m, (1.0 + h) * k));
+                    let (e1, e2) = (sub(b, a), sub(c, a));
+                    let mut nv = norm(cross(e1, e2));
+                    if crate::shapes::dot(nv, add(a, add(b, c))) < 0.0 {
+                        nv = scale(nv, -1.0);
+                    }
+                    let n = ((len(e1).max(len(e2)).max(len(sub(c, b))) * step) as usize).max(2);
+                    for i in 0..=n {
+                        for j in 0..=(n - i) {
+                            g.pts.push(add(a, add(scale(e1, i as f32 / n as f32), scale(e2, j as f32 / n as f32))));
+                            g.nrm.push(nv);
+                        }
+                    }
+                }
+            }
+            P::Hyper { n, twist, phase, rate } => {
+                // straight rods between two rims; turning one rim against the other pinches the waist
+                let (r, h) = (0.62, 0.7);
+                let tw = twist * (phase + t * rate).sin();
+                let line = |g: &mut Geom, a: V3, b: V3| {
+                    let d = sub(b, a);
+                    let m = ((len(d) * ppu * 1.7) as usize).max(4);
+                    for k in 0..=m {
+                        g.pts.push(add(a, scale(d, k as f32 / m as f32)));
+                    }
+                };
+                for i in 0..*n {
+                    let a = TAU * i as f32 / *n as f32;
+                    for dir in [-0.5f32, 0.5] {
+                        let (s0, c0) = (a - dir * tw).sin_cos();
+                        let (s1, c1) = (a + dir * tw).sin_cos();
+                        line(g, [r * c0, -h, r * s0], [r * c1, h, r * s1]);
+                    }
+                }
+                let m = ((TAU * r * ppu * 1.7) as usize).max(16);
+                for y in [-h, h] {
+                    for i in 0..m {
+                        let (sa, ca) = (TAU * i as f32 / m as f32).sin_cos();
+                        g.pts.push([r * ca, y, r * sa]);
+                    }
+                }
+            }
+            P::Membrane { amp, rates, ph, tab, .. } => {
+                // two modes at unrelated rates, so the skin is never flat
+                let t0 = amp * (ph[0] + t * rates[0]).sin();
+                let t1 = 0.7 * amp * (ph[1] + t * rates[1]).cos();
+                for r in tab {
+                    g.pts.push([r[0], r[1], t0 * r[2] + t1 * r[5]]);
+                    g.nrm.push(norm([-(t0 * r[3] + t1 * r[6]), -(t0 * r[4] + t1 * r[7]), 1.0]));
                 }
             }
         }
     }
+}
+
+/// Faces (corner lists) of the three solids `crystal` grows from, corners on the unit sphere.
+fn icosahedron() -> Vec<Vec<V3>> {
+    let g = (1.0 + 5f32.sqrt()) / 2.0;
+    let v: Vec<V3> = [[-1.0, g, 0.0], [1.0, g, 0.0], [-1.0, -g, 0.0], [1.0, -g, 0.0], [0.0, -1.0, g], [0.0, 1.0, g],
+                      [0.0, -1.0, -g], [0.0, 1.0, -g], [g, 0.0, -1.0], [g, 0.0, 1.0], [-g, 0.0, -1.0], [-g, 0.0, 1.0]]
+        .iter()
+        .map(|p| norm(*p))
+        .collect();
+    [(0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11), (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6),
+     (7, 1, 8), (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9), (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7),
+     (9, 8, 1)]
+        .iter()
+        .map(|&(a, b, c)| vec![v[a], v[b], v[c]])
+        .collect()
+}
+
+/// The icosahedron's dual: one pentagon around each of its corners.
+fn dodecahedron() -> Vec<Vec<V3>> {
+    let ico = icosahedron();
+    let mut corners: Vec<V3> = Vec::new();
+    for f in &ico {
+        for p in f {
+            if !corners.iter().any(|q| len(sub(*q, *p)) < 1e-4) {
+                corners.push(*p);
+            }
+        }
+    }
+    corners
+        .iter()
+        .map(|c| {
+            let e1 = norm(cross(*c, if c[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] }));
+            let e2 = cross(*c, e1);
+            let mut ring: Vec<(f32, V3)> = ico
+                .iter()
+                .filter(|f| f.iter().any(|p| len(sub(*p, *c)) < 1e-4))
+                .map(|f| {
+                    let m = norm(add(f[0], add(f[1], f[2])));
+                    (crate::shapes::dot(m, e2).atan2(crate::shapes::dot(m, e1)), m)
+                })
+                .collect();
+            ring.sort_by(|a, b| a.0.total_cmp(&b.0));
+            ring.into_iter().map(|(_, m)| m).collect()
+        })
+        .collect()
+}
+
+fn octahedron() -> Vec<Vec<V3>> {
+    let mut f = Vec::new();
+    for sx in [-1.0, 1.0] {
+        for sy in [-1.0, 1.0] {
+            for sz in [-1.0, 1.0] {
+                f.push(vec![[sx, 0.0, 0.0], [0.0, sy, 0.0], [0.0, 0.0, sz]]);
+            }
+        }
+    }
+    f
 }
 
 fn tesseract() -> (Vec<[f32; 4]>, Vec<(usize, usize)>) {
@@ -664,38 +866,4 @@ fn aizawa(rng: &mut Rng) -> (Vec<V3>, Vec<f32>) {
         }
     }
     finish_traj(out)
-}
-
-fn nebula(rng: &mut Rng) -> (Vec<V3>, Vec<(V3, f32, f32)>, Vec<(usize, usize)>) {
-    let clumps: Vec<(V3, f32)> = (0..3)
-        .map(|_| ([rng.gauss(0.0, 0.3), rng.gauss(0.0, 0.25), rng.gauss(0.0, 0.3)], rng.uniform(0.15, 0.3)))
-        .collect();
-    let mut stars = Vec::new();
-    while stars.len() < 150 {
-        let (c, s) = clumps[stars.len() % 3];
-        let p = add(c, [rng.gauss(0.0, s), rng.gauss(0.0, s), rng.gauss(0.0, s)]);
-        if len(p) < 0.92 {
-            stars.push(p);
-        }
-    }
-    let drift = stars
-        .iter()
-        .map(|_| ([rng.gauss(0.0, 0.03), rng.gauss(0.0, 0.03), rng.gauss(0.0, 0.03)], rng.uniform(0.05, 0.15),
-                  rng.uniform(0.0, TAU)))
-        .collect();
-    let mut edges = Vec::new();
-    for i in 0..stars.len() {
-        let mut d: Vec<(f32, usize)> = (0..stars.len())
-            .filter(|j| *j != i)
-            .map(|j| (len(sub(stars[i], stars[j])), j))
-            .collect();
-        d.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for &(_, j) in d.iter().take(2) {
-            let e = if i < j { (i, j) } else { (j, i) };
-            if !edges.contains(&e) {
-                edges.push(e);
-            }
-        }
-    }
-    (stars, drift, edges)
 }

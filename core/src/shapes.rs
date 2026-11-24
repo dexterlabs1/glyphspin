@@ -5,9 +5,9 @@ use std::f32::consts::PI;
 
 pub type V3 = [f32; 3];
 
-pub const SHAPES: [&str; 18] = ["torus", "torus_wire", "knot", "geodesic", "lattice", "mobius", "ring", "hopf",
-                                "tesseract", "gyroid", "attractor", "supershape", "klein", "armillary", "metaballs",
-                                "nebula", "calabi_yau", "mobius_stack"];
+pub const SHAPES: [&str; 20] = ["torus", "knot", "geodesic", "lattice", "mobius", "ring", "hopf", "tesseract",
+                                "gyroid", "attractor", "supershape", "klein", "armillary", "metaballs", "calabi_yau",
+                                "helix", "shell", "crystal", "hyperboloid", "membrane"];
 
 // ------------------------------------------------------------------ small math
 
@@ -131,7 +131,7 @@ pub struct Shape {
 }
 
 enum Params {
-    Torus { phase: f32, rate: f32, wire: bool, u: Vec<f32>, v: Vec<f32>, ou: Vec<f32>, ov: Vec<f32> },
+    Torus { phase: f32, rate: f32, u: Vec<f32>, v: Vec<f32> },
     Knot { pq: ((f32, f32), (f32, f32)), phase: f32, period: f32, t: Vec<f32> },
     Geodesic { phase: f32, rate: f32, freq: u32, ea: Vec<V3>, eb: Vec<V3>, s: Vec<f32> },
     Lattice { phase: f32, rate: f32, p0: Vec<V3> },
@@ -173,16 +173,9 @@ impl Shape {
             p,
         };
         match name {
-            "torus" | "torus_wire" => {
-                let wire = name == "torus_wire";
-                let mut s = base(if wire { "torus_wire" } else { "torus" },
-                                 if wire { Kind::Lines } else { Kind::Surface },
-                                 vec![([1.0, 0.0, 0.0], -0.85)],
-                                 Params::Torus { phase: rng.uniform(0.0, 2.0 * PI), rate: rng.uniform(0.18, 0.3), wire,
-                                                 u: vec![], v: vec![], ou: vec![], ov: vec![] });
-                s.has_occluder = wire;
-                s
-            }
+            "torus" => base("torus", Kind::Surface, vec![([1.0, 0.0, 0.0], -0.85)],
+                            Params::Torus { phase: rng.uniform(0.0, 2.0 * PI), rate: rng.uniform(0.18, 0.3),
+                                            u: vec![], v: vec![] }),
             "knot" => {
                 let pairs = [(2.0, 3.0), (3.0, 2.0), (2.0, 5.0), (3.0, 4.0), (3.0, 5.0), (5.0, 2.0)];
                 let a = rng.pick(&pairs);
@@ -206,7 +199,7 @@ impl Shape {
                 s
             }
             "lattice" => {
-                let k = rng.pick(&[4usize, 5, 5, 6]);
+                let k = rng.pick(&[7usize, 8, 8, 9]);
                 let phase = rng.uniform(0.0, 2.0 * PI);
                 let rate = rng.uniform(0.08, 0.14);
                 let g = linspace(-1.0, 1.0, k, true);
@@ -265,46 +258,18 @@ impl Shape {
         }
         let tau = 2.0 * PI;
         match self.p {
-            Params::Torus { wire, .. } => {
-                let (mut u, mut v, mut ou, mut ov) = (vec![], vec![], vec![], vec![]);
-                if !wire {
-                    let nu = self.n(tau * 0.7, 1.15);
-                    let nv = self.n(tau * 0.3, 1.15);
+            Params::Torus { .. } => {
+                let nu = self.n(tau * 0.7, 1.15);
+                let nv = self.n(tau * 0.3, 1.15);
+                if let Params::Torus { u, v, .. } = &mut self.p {
+                    u.clear();
+                    v.clear();
                     for &vv in &linspace(0.0, tau, nv, false) {
                         for &uu in &linspace(0.0, tau, nu, false) {
                             u.push(uu);
                             v.push(vv);
                         }
                     }
-                } else {
-                    let nu = self.n(tau * 0.7, 1.6);
-                    let nv = self.n(tau * 0.3, 1.6);
-                    for &uu in &linspace(0.0, tau, 16, false) {
-                        for &vv in &linspace(0.0, tau, nv, false) {
-                            u.push(uu);
-                            v.push(vv);
-                        }
-                    }
-                    for &vv in &linspace(0.0, tau, 6, false) {
-                        for &uu in &linspace(0.0, tau, nu, false) {
-                            u.push(uu);
-                            v.push(vv);
-                        }
-                    }
-                    let nou = self.n(tau, 1.2);
-                    let nov = self.n(tau * 0.3, 1.2);
-                    for &a in &linspace(0.0, tau, nou, false) {
-                        for &b in &linspace(0.0, tau, nov, false) {
-                            ou.push(a);
-                            ov.push(b);
-                        }
-                    }
-                }
-                if let Params::Torus { u: pu, v: pv, ou: pou, ov: pov, .. } = &mut self.p {
-                    *pu = u;
-                    *pv = v;
-                    *pou = ou;
-                    *pov = ov;
                 }
             }
             Params::Knot { .. } => {
@@ -355,7 +320,7 @@ impl Shape {
         g.clear();
         match &self.p {
             Params::X(x) => x.geom(t, g, self.user4),
-            Params::Torus { phase, rate, wire, u, v, ou, ov } => {
+            Params::Torus { phase, rate, u, v } => {
                 let r = 0.29 + 0.035 * (phase + t * rate).sin();
                 let big = 1.0 - r;
                 for (uu, vv) in u.iter().zip(v) {
@@ -364,12 +329,6 @@ impl Shape {
                     let n = [cv * cu, cv * su, sv];
                     g.pts.push([big * cu + r * n[0], big * su + r * n[1], r * n[2]]);
                     g.nrm.push(n);
-                }
-                if *wire {
-                    for (a, b) in ou.iter().zip(ov) {
-                        let rr = big + r * 0.97 * b.cos();
-                        g.occ.push([rr * a.cos(), rr * a.sin(), r * 0.97 * b.sin()]);
-                    }
                 }
             }
             Params::Knot { pq, phase, period, t: tt } => {

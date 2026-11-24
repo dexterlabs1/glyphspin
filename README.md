@@ -18,9 +18,9 @@ https://github.com/user-attachments/assets/cbb960a7-2b7b-4364-8167-63d7c3d43662
 ## Why it's different
 - **Made of type.** Every frame is a grid of characters: a luminance ramp, braille or dots, shaded in five depth
   bands of one colour. No textures, no video loop: it is computed live.
-- **18 objects worth staring at.** Torus knots, a Hopf fibration, a tesseract and 24-cell turning through the
+- **20 objects worth staring at.** Torus knots, a Hopf fibration, a tesseract and 24-cell turning through the
   fourth dimension, a gyroid shell, Lorenz and Aizawa attractors that draw themselves, a Klein bottle, a
-  Calabi-Yau slice, a nebula with constellation lines and more. Every reroll mixes a shape, a render mode (solid,
+  Calabi-Yau slice, a crystal that grows into a star, a seashell, a double helix and more. Every reroll mixes a shape, a render mode (solid,
   wire or points), an ambient effect and a transition.
 - **It roams.** The object travels the whole screen in slow straight lines and turns softly at the edges, like the
   old DVD logo at a fraction of the speed. Prefer calm? Switch to a gentle wander.
@@ -37,7 +37,7 @@ https://github.com/user-attachments/assets/cbb960a7-2b7b-4364-8167-63d7c3d43662
 - **Featherweight.** About 2-3 % of one CPU core while drifting and 25 MB of memory. Covered, locked or asleep, it
   stops completely.
 
-<p align="center"><img src="docs/shapes.png" width="960" alt="The 18 shapes"></p>
+<p align="center"><img src="docs/shapes.png" width="960" alt="The 20 shapes"></p>
 
 ## Install
 **Windows 10 2004+ / Windows 11** (Direct3D 11 GPU)
@@ -76,7 +76,7 @@ Glyphspin only observes the mouse; it never blocks or swallows input. On macOS i
 access, so a click on a Finder icon ripples too.
 
 ## The menu
-Reroll · **Shape** (random or any of the 18) · **Look** (glyph style, glyph size, motion: bounce or wander) ·
+Reroll · **Shape** (random or any of the 20) · **Look** (glyph style, glyph size, motion: bounce or wander) ·
 **Theme** (eight palettes, OLED black background, rotate themes: off, with each new shape, or every 15, 30 or 60
 minutes) · **Effects** (off, subtle, full) · **Music** (Apple Music, all audio or off, plus intensity) · **Display**
 (HDR auto / on / off, highlight strength) · **OLED care** · **Frame rate** (15 / 30 / 60 max) · Pause · Start with

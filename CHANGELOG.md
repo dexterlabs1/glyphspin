@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 - 2026-11-24
+- Shape catalog reworked, now 20 shapes. New: helix (a double helix that winds and relaxes), shell (ammonite coils
+  and spires with a growing lip), crystal (an icosahedron, dodecahedron or octahedron whose faces rise into a star),
+  hyperboloid (straight rods that pinch into an hourglass) and membrane (a drum skin in two standing waves).
+- Removed: torus_wire (it was the torus in wire mode), mobius_stack (read as another torus) and nebula (read as
+  noise). A saved shape that no longer exists falls back to random.
+- Klein is now the classic bottle with its handle instead of the figure-8 form, which looked like a torus.
+- Lattice is denser (7 to 9 points a side), so it reads as a crystal instead of scattered dots. Supershape morphs
+  between whole shapes, so it no longer tears open mid-morph. Metaballs separate into lobes. The gyroid stays
+  closer to a full sphere with finer channels. Calabi-Yau drops the n = 3 form.
+
 ## 0.4.1 - 2026-11-09
 - Windows: music reactivity works with current Apple Music builds, which play through AMPLibraryAgent.exe (started by a
   service, outside AppleMusic.exe's process tree). Glyphspin now captures whichever Apple Music process owns the audio
